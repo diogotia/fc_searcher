@@ -31,10 +31,11 @@ def _urlopen_with_retries(req: urllib.request.Request, *, timeout: int) -> str:
             raw = exc.read().decode("utf-8", errors="replace")
             if exc.code == 404:
                 print(
-                    "hint: 404 usually means this route is missing on the server you are calling "
-                    "(stale image or wrong API_HOST). Rebuild and recreate the app container, "
-                    "e.g. `docker compose build facebook-monitor && docker compose up -d --force-recreate facebook-monitor`, "
-                    "then confirm `API_HOST` in .env matches that server.",
+                    "hint: 404 usually means this route is missing in the running image "
+                    "(`docker compose up --force-recreate` does not rebuild). Run "
+                    "`docker compose build facebook-monitor && docker compose up -d --force-recreate facebook-monitor`, "
+                    "then `curl -s http://localhost:5000/health` and check "
+                    "`post_admin_report_browser_html_last` is true.",
                     file=sys.stderr,
                 )
             try:

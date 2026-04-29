@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, current_app, jsonify
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.config import Settings, get_settings, reload_settings_if_dotenv_mounted
@@ -17,8 +17,14 @@ def _settings() -> Settings:
 def health() -> tuple[dict, int]:
     settings = _settings()
     group_ids = settings.group_id_list()
+    post_rules = {
+        r.rule
+        for r in current_app.url_map.iter_rules()
+        if r.methods and "POST" in r.methods
+    }
     body = {
         "status": "ok",
+        "post_admin_report_browser_html_last": "/admin/report-browser-html-last" in post_rules,
         "facebook_configured": settings.facebook_graph_ready(),
         "facebook_mock_feed_json": bool((settings.facebook_mock_feed_json or "").strip()),
         "facebook_sync_mode": settings.facebook_sync_mode,
