@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+from flask import Blueprint, Response, jsonify
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+from src.config import Settings, get_settings, reload_settings_if_dotenv_mounted
+
+bp = Blueprint("health", __name__)
+
+
+def _settings() -> Settings:
+    reload_settings_if_dotenv_mounted()
+    return get_settings()
+
+
+@bp.get("/health")
+def health() -> tuple[dict, int]:
+    settings = _settings()
+    group_ids = settings.group_id_list()
+    body = {
+        "status": "ok",
+        "facebook_configured": settings.facebook_graph_ready(),
+        "facebook_mock_feed_json": bool((settings.facebook_mock_feed_json or "").strip()),
+        "facebook_sync_mode": settings.facebook_sync_mode,
+        "facebook_group_ids_count": len(group_ids),
+        "anthropic_configured": bool(settings.anthropic_api_key),
+        "smtp_configured": bool(settings.smtp_user and settings.smtp_password and settings.report_email),
+        "webhook_verify_configured": bool(settings.webhook_verify_token and settings.facebook_app_secret),
+        "database_url_scheme": settings.database_url.split(":", 1)[0],
+        "enable_public_post_search": settings.enable_public_post_search,
+        "enable_browser_search_sync": settings.enable_browser_search_sync,
+        "browser_search_query": settings.browser_search_query,
+        "browser_headless": settings.browser_headless,
+        "browser_seed_group_urls_configured": bool((settings.browser_seed_group_urls or "").strip()),
+    }
+    return jsonify(body), 200
+
+
+@bp.get("/metrics")
+def metrics() -> Response:
+    data = generate_latest()
+    return Response(data, mimetype=CONTENT_TYPE_LATEST)

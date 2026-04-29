@@ -1,0 +1,29 @@
+.env*
+!.env.example
+.env copy
+.cursor/
+.venv/
+.venv-py312/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.db
+data/
+reports/
+report/
+logs/
+backups/
+output/
+.playwright-cli/
+.DS_Store
+
+# Accidental local venvs / tooling artifacts at repo root (not the project)
+/#/
+/3.11+/
+/another/
+/interpreter/
+/or/
+Qwen_*
+/table-*.csv

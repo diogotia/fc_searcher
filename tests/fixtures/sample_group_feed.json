@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "id": "dev_post_1",
+      "message": "Development post about Berlin meetup",
+      "created_time": "2024-06-01T10:00:00+0000",
+      "from": { "id": "100", "name": "Dev User" }
+    },
+    {
+      "id": "dev_post_2",
+      "message": "Another line for keyword search tests",
+      "created_time": "2024-06-02T15:30:00+0000",
+      "from": { "id": "101", "name": "Other" }
+    }
+  ]
+}

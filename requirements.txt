@@ -1,0 +1,16 @@
+flask>=3.0.0,<4
+sqlalchemy>=2.0.25,<3
+pydantic-settings>=2.1.0,<3
+anthropic>=0.18.0,<1
+apscheduler>=3.10.0,<4
+requests>=2.31.0,<3
+jinja2>=3.1.2,<4
+gunicorn>=21.2.0,<24
+python-dotenv>=1.0.0,<2
+python-dateutil>=2.8.2,<3
+psycopg[binary]>=3.1.18,<4
+prometheus-client>=0.20.0,<1
+
+# dev / ci
+ruff>=0.4.0,<1
+pytest>=8.0.0,<9
