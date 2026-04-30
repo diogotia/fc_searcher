@@ -72,7 +72,7 @@ def main() -> None:
 
         Optional `query` overrides `BROWSER_SEARCH_QUERY` for **global** group discovery
         (`/search/groups/?q=`). Optional **`in_group_query`** overrides `BROWSER_IN_GROUP_SEARCH_QUERY`
-        for each group's in-feed search URL (`/groups/{id}/search/?q=`); when omitted, `query` is used for both.
+        (comma-separated tokens; each phase uses ``query + " " + token``). When omitted, env / `query` applies.
 
         Optional **`in_group_queries`**: ordered list of in-group search strings run in the **same**
         browser session after one login (one discovery pass, then each phrase per group). When set,
@@ -82,9 +82,10 @@ def main() -> None:
         (case-insensitive). Use with multi-phase runs to keep e.g. ``ищу работу`` as a filter across all phases.
 
         Optional `group_limit` / `post_limit_per_group` override the usual caps (same as admin JSON body).
+        **`group_limit`** caps only groups from **`/search/groups`**; every seed URL is still scanned.
 
         **`seed_group_urls`:** comma-separated `https://www.facebook.com/groups/NUMERIC_ID/...` URLs or numeric ids.
-        Those groups are opened **first** (before Facebook group search results), e.g. to target one public group URL.
+        Those groups are opened **first** and **all** are used; then up to `group_limit` groups from search results.
         You can also set `BROWSER_SEED_GROUP_URLS` in `.env` for the same effect across runs.
         """
         return str(

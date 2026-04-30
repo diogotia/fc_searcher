@@ -105,7 +105,7 @@ def main() -> int:
         "--in-group-query",
         default=None,
         dest="in_group_query",
-        help="Override BROWSER_IN_GROUP_SEARCH_QUERY (/groups/{id}/search/?q=); default: same as --query",
+        help="Override BROWSER_IN_GROUP_SEARCH_QUERY: comma-separated tokens; each phase uses '<query> <token>'.",
     )
     parser.add_argument("--group-limit", type=int, default=None, metavar="N")
     parser.add_argument("--post-limit", type=int, default=None, metavar="N")

@@ -580,22 +580,89 @@ def post_publication_year_matches_filter(
     return inferred == allowed_year
 
 
+def _split_in_group_query_tokens(raw: str) -> list[str]:
+    """Split comma- or newline-separated tokens from env / CLI (strip, drop empties)."""
+    out: list[str] = []
+    for line in raw.replace("\r", "").splitlines():
+        for part in line.split(","):
+            p = part.strip()
+            if p:
+                out.append(p)
+    return out
+
+
+def primary_browser_search_phrase(raw: str) -> str:
+    """First comma/newline token of ``BROWSER_SEARCH_QUERY`` (or CLI ``query``).
+
+    Facebook ``/search/groups`` works best with **one** short ``q=`` string. If you list several
+    comma-separated variants in ``.env``, only the **first** is used for discovery and as the
+    prefix for ``BROWSER_IN_GROUP_SEARCH_QUERY`` tokens. Run again with a different first segment,
+    or use ``in_group_queries`` from the admin API for full manual control.
+    """
+    parts = _split_in_group_query_tokens((raw or "").strip() or "job")
+    return parts[0] if parts else "job"
+
+
+def build_in_group_phrases_for_settings(
+    search_query: str,
+    *,
+    in_group_query: str | None,
+    settings_in_group: str,
+) -> list[str]:
+    """Build in-group ``/groups/…/search/?q=`` phrases from env or CLI.
+
+    If ``BROWSER_IN_GROUP_SEARCH_QUERY`` (or ``in_group_query``) lists several values separated by
+    commas, each token is prefixed with ``search_query`` (``BROWSER_SEARCH_QUERY``), e.g.
+    ``ищу работу`` + ``малярные работы`` → ``ищу работу малярные работы``.
+
+    When empty, returns ``[search_query]``. A single token equal to ``search_query`` (casefold)
+    returns ``[search_query]`` once. A single other token is prefixed.
+    """
+    raw = (in_group_query or settings_in_group or "").strip()
+    sq = search_query.strip() or "job"
+    if not raw:
+        return [sq]
+    parts = _split_in_group_query_tokens(raw)
+    if not parts:
+        return [sq]
+    if len(parts) == 1:
+        one = parts[0]
+        if one.casefold() == sq.casefold():
+            return [sq]
+        return [f"{sq} {one}".strip()]
+    return [f"{sq} {p}".strip() for p in parts]
+
+
 def merge_discovered_group_lists(
     priority: list[DiscoveredGroup],
     secondary: list[DiscoveredGroup],
-    limit: int,
+    discovery_limit: int,
 ) -> list[DiscoveredGroup]:
-    """Dedupe by canonical group URL; fill up to `limit` with `priority` first, then `secondary`."""
+    """Dedupe by canonical group URL.
+
+    **All** unique ``priority`` entries (typically ``BROWSER_SEED_GROUP_URLS``) are kept.
+    Then up to ``discovery_limit`` additional groups are taken from ``secondary`` (Facebook
+    ``/search/groups`` results), skipping URLs already present in seeds. ``discovery_limit`` is
+    the same value as ``BROWSER_GROUP_SCAN_LIMIT`` / ``group_limit`` — it does **not** count seeds.
+    """
     seen: set[str] = set()
     merged: list[DiscoveredGroup] = []
-    for g in priority + secondary:
+    for g in priority:
         key = g.group_url.rstrip("/").lower()
         if key in seen:
             continue
         seen.add(key)
         merged.append(g)
-        if len(merged) >= limit:
+    added_from_discovery = 0
+    for g in secondary:
+        if added_from_discovery >= discovery_limit:
             break
+        key = g.group_url.rstrip("/").lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(g)
+        added_from_discovery += 1
     return merged
 
 
@@ -611,17 +678,27 @@ def run_browser_group_search(
     runner_factory: type[PlaywrightCliRunner] = PlaywrightCliRunner,
     global_message_contains: str | None = None,
 ) -> dict[str, Any]:
-    search_query = (query or settings.browser_search_query or "job").strip() or "job"
-    default_in_group = (
-        (in_group_query or settings.browser_in_group_search_query or "").strip() or search_query
-    )
+    raw_search = (query or settings.browser_search_query or "job").strip() or "job"
+    discovery_query = primary_browser_search_phrase(raw_search)
     if in_group_queries is not None:
         phrases = [str(p).strip() for p in in_group_queries if str(p).strip()]
         if not phrases:
-            phrases = [default_in_group]
+            phrases = build_in_group_phrases_for_settings(
+                discovery_query,
+                in_group_query=in_group_query,
+                settings_in_group=settings.browser_in_group_search_query,
+            )
     else:
-        phrases = [default_in_group]
-    in_group_kw = phrases[0]
+        phrases = build_in_group_phrases_for_settings(
+            discovery_query,
+            in_group_query=in_group_query,
+            settings_in_group=settings.browser_in_group_search_query,
+        )
+    in_group_summary = (
+        phrases[0]
+        if len(phrases) == 1
+        else f"{len(phrases)} phases: " + " | ".join(phrases[:3]) + (" | …" if len(phrases) > 3 else "")
+    )
     safe_group_limit = _coerce_limit(group_limit, settings.browser_group_scan_limit)
     safe_post_limit = _coerce_limit(post_limit_per_group, settings.browser_post_limit_per_group)
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
@@ -635,9 +712,10 @@ def run_browser_group_search(
     year_f = settings.browser_post_publication_year
     cutoff = browser_publication_cutoff_date(settings)
     logger.info(
-        "Starting browser search sync discover_query=%s in_group_queries=%s group_limit=%s post_limit=%s "
+        "Starting browser search sync discover_query=%s (raw=%r) in_group_queries=%s group_limit=%s post_limit=%s "
         "global_message_contains=%s publication_year_filter=%s publication_from_date=%s",
-        search_query,
+        discovery_query,
+        raw_search,
         phrases,
         safe_group_limit,
         safe_post_limit,
@@ -647,15 +725,17 @@ def run_browser_group_search(
     )
     try:
         ensure_logged_in(runner, settings=settings)
-        discovered = discover_groups(search_query, safe_group_limit, runner)
+        discovered = discover_groups(discovery_query, safe_group_limit, runner)
         seeds = list(seed_groups or [])
         groups = merge_discovered_group_lists(seeds, discovered, safe_group_limit)
         logger.info(
-            "Browser search groups total=%s (seed=%s discovered=%s) discover_query=%s in_group_queries=%s",
+            "Browser search groups total=%s (seed_unique=%s discovered_raw=%s discovery_cap=%s) "
+            "discover_query=%s in_group_queries=%s",
             len(groups),
-            len(seeds),
+            len({g.group_url.rstrip('/').lower() for g in seeds}),
             len(discovered),
-            search_query,
+            safe_group_limit,
+            discovery_query,
             phrases,
         )
         results_by_url: dict[str, dict[str, Any]] = {}
@@ -727,8 +807,8 @@ def run_browser_group_search(
         results = list(results_by_url.values())
         out: dict[str, Any] = {
             "ok": True,
-            "query": search_query,
-            "in_group_query": in_group_kw,
+            "query": discovery_query,
+            "in_group_query": in_group_summary,
             "in_group_queries": phrases,
             "groups_scanned": len(groups),
             "groups": results,
@@ -742,6 +822,8 @@ def run_browser_group_search(
             out["publication_year_filter"] = year_f
         if cutoff is not None:
             out["publication_from_date"] = cutoff.isoformat()
+        if raw_search != discovery_query:
+            out["search_query_raw"] = raw_search
         return out
     finally:
         runner.close()
@@ -843,7 +925,12 @@ def ensure_logged_in(runner: PlaywrightCliRunner, *, settings: Settings) -> None
         runner.screenshot("login-required-timeout")
     except BrowserAutomationError:
         logger.debug("Unable to capture login timeout screenshot", exc_info=True)
-    raise ManualLoginRequiredError("manual Facebook login was not completed before timeout")
+    raise ManualLoginRequiredError(
+        "manual Facebook login was not completed before timeout "
+        f"(waited {timeout_seconds}s). Increase BROWSER_SEARCH_TIMEOUT_SECONDS in .env, complete "
+        "login in the visible browser window sooner, or set PLAYWRIGHT_STORAGE_STATE_PATH after a "
+        "one-time login export to skip the wait."
+    )
 
 
 def _is_logged_in(runner: PlaywrightCliRunner) -> bool:

@@ -14,6 +14,7 @@ def test_health(client):
     assert data.get("browser_search_query") == "job"
     assert data.get("browser_headless") is False
     assert data.get("browser_seed_group_urls_configured") is False
+    assert data.get("post_admin_report_browser_html_last") is True
 
 
 def test_metrics(client):
@@ -118,6 +119,7 @@ def test_admin_report_browser_html_last_merges_daily_shape(client, monkeypatch):
             "browser_html_email_sent": True,
             "browser_html_ok": True,
             "browser_html_attachment": "browser_search_search_latest.html",
+            "daily_posts_html": "/app/reports/daily_posts_20260429T999999Z.html",
         }
 
     monkeypatch.setattr(

@@ -24,12 +24,15 @@ from src.services.browser_search import (
     BrowserAutomationError,
     ManualLoginRequiredError,
     browser_publication_cutoff_date,
+    build_in_group_phrases_for_settings,
     parse_seed_group_urls,
     post_publication_matches_settings_filter,
+    primary_browser_search_phrase,
     run_browser_group_search,
 )
 from src.services.browser_search_html_report import write_browser_search_html_report
 from src.services.claude_analyzer import ClaudeAnalyzer
+from src.services.daily_report_rows_html import write_daily_report_rows_html
 from src.services.email_reporter import EmailReporter
 from src.services.facebook_client import USER_FEED_GROUP_ID, FacebookClient
 if TYPE_CHECKING:
@@ -95,9 +98,20 @@ def sync_post_contacts(session: Session, post_id: str, message: str | None) -> N
 def _effective_browser_queries(
     settings: Settings, query: str | None, in_group_query: str | None
 ) -> tuple[str, str]:
-    """Global group-discovery `q` vs each group's `/groups/{id}/search/?q=` phrase."""
-    search_q = (query or settings.browser_search_query or "job").strip() or "job"
-    in_g = (in_group_query or settings.browser_in_group_search_query or "").strip() or search_q
+    """Global discovery uses first comma token of ``BROWSER_SEARCH_QUERY``; in-group list is prefixed with it."""
+    raw_sq = (query or settings.browser_search_query or "job").strip() or "job"
+    search_q = primary_browser_search_phrase(raw_sq)
+    phrases = build_in_group_phrases_for_settings(
+        search_q,
+        in_group_query=in_group_query,
+        settings_in_group=settings.browser_in_group_search_query,
+    )
+    if len(phrases) == 1:
+        in_g = phrases[0]
+    else:
+        in_g = (
+            f"{len(phrases)} phases: " + " | ".join(phrases[:3]) + (" | …" if len(phrases) > 3 else "")
+        )
     return search_q, in_g
 
 
@@ -303,6 +317,15 @@ def run_browser_search_sync(
         return out
 
     if not settings.enable_browser_search_sync:
+        ig_list = (
+            cleaned_queries
+            if cleaned_queries is not None
+            else build_in_group_phrases_for_settings(
+                sq,
+                in_group_query=in_group_query,
+                settings_in_group=settings.browser_in_group_search_query,
+            )
+        )
         return _with_html_report(
             {
                 "ok": False,
@@ -314,7 +337,7 @@ def run_browser_search_sync(
                 "errors": [],
                 "query": sq,
                 "in_group_query": ig,
-                "in_group_queries": cleaned_queries,
+                "in_group_queries": ig_list,
                 "global_message_contains": (global_message_contains or "").strip() or None,
                 "artifacts_dir": None,
             }
@@ -332,39 +355,61 @@ def run_browser_search_sync(
             global_message_contains=global_message_contains,
         )
     except ManualLoginRequiredError as exc:
-        return _with_html_report(
-            {
-                "ok": False,
-                "error": str(exc),
-                "upserted": 0,
-                "groups_scanned": 0,
-                "groups_with_hits": 0,
-                "found_posts": 0,
-                "errors": [],
-                "query": sq,
-                "in_group_query": ig,
-                "in_group_queries": cleaned_queries,
-                "global_message_contains": (global_message_contains or "").strip() or None,
-                "artifacts_dir": None,
-            }
+        ig_list = (
+            cleaned_queries
+            if cleaned_queries is not None
+            else build_in_group_phrases_for_settings(
+                sq,
+                in_group_query=in_group_query,
+                settings_in_group=settings.browser_in_group_search_query,
+            )
         )
+        raw_sq = (query or settings.browser_search_query or "job").strip() or "job"
+        err_body: dict[str, Any] = {
+            "ok": False,
+            "error": str(exc),
+            "upserted": 0,
+            "groups_scanned": 0,
+            "groups_with_hits": 0,
+            "found_posts": 0,
+            "errors": [],
+            "query": sq,
+            "in_group_query": ig,
+            "in_group_queries": ig_list,
+            "global_message_contains": (global_message_contains or "").strip() or None,
+            "artifacts_dir": None,
+        }
+        if raw_sq != sq:
+            err_body["search_query_raw"] = raw_sq
+        return _with_html_report(err_body)
     except BrowserAutomationError as exc:
-        return _with_html_report(
-            {
-                "ok": False,
-                "error": str(exc),
-                "upserted": 0,
-                "groups_scanned": 0,
-                "groups_with_hits": 0,
-                "found_posts": 0,
-                "errors": [],
-                "query": sq,
-                "in_group_query": ig,
-                "in_group_queries": cleaned_queries,
-                "global_message_contains": (global_message_contains or "").strip() or None,
-                "artifacts_dir": None,
-            }
+        ig_list = (
+            cleaned_queries
+            if cleaned_queries is not None
+            else build_in_group_phrases_for_settings(
+                sq,
+                in_group_query=in_group_query,
+                settings_in_group=settings.browser_in_group_search_query,
+            )
         )
+        raw_sq = (query or settings.browser_search_query or "job").strip() or "job"
+        err_body = {
+            "ok": False,
+            "error": str(exc),
+            "upserted": 0,
+            "groups_scanned": 0,
+            "groups_with_hits": 0,
+            "found_posts": 0,
+            "errors": [],
+            "query": sq,
+            "in_group_query": ig,
+            "in_group_queries": ig_list,
+            "global_message_contains": (global_message_contains or "").strip() or None,
+            "artifacts_dir": None,
+        }
+        if raw_sq != sq:
+            err_body["search_query_raw"] = raw_sq
+        return _with_html_report(err_body)
 
     result = browse_result
     assert result is not None
@@ -481,8 +526,10 @@ def build_report_context(session: Session, settings: Settings) -> tuple[dict[str
     return report, rows
 
 
-def run_daily_report(settings: Settings | None = None) -> dict[str, Any]:
-    settings = settings or get_settings()
+def _build_daily_report_artifacts(
+    settings: Settings,
+) -> tuple[dict[str, Any], dict[str, Any], Path, list[Path], dict[str, Any]]:
+    """Write daily CSVs and build ``report`` / ``analysis`` for email. Does not send."""
     reporter = EmailReporter(settings)
     with get_session() as session:
         report, rows = build_report_context(session, settings)
@@ -510,23 +557,19 @@ def run_daily_report(settings: Settings | None = None) -> dict[str, Any]:
         reporter.write_csv(email_rows, emails_csv)
         extra_attachments.append(emails_csv)
 
-    subject = f"Facebook Monitor daily report — {report['date']} ({run_stamp})"
-    sent = reporter.send_report_email(
-        subject=subject,
-        report=report,
-        analysis=analysis,
-        csv_path=csv_path,
-        extra_attachments=extra_attachments or None,
-    )
+    daily_html_path = reports_dir / f"daily_posts_{run_stamp}.html"
+    write_daily_report_rows_html(daily_html_path, report=report, rows=rows, run_stamp=run_stamp)
+    extra_attachments.append(daily_html_path)
+
     out: dict[str, Any] = {
         "ok": True,
         "date": report["date"],
         "run_stamp": run_stamp,
-        "email_sent": sent,
         "csv": str(csv_path),
         "rows": len(rows),
         "phones_exported": len(phone_rows),
         "emails_exported": len(email_rows),
+        "daily_posts_html": str(daily_html_path),
     }
     if report.get("publication_year_filter") is not None:
         out["publication_year_filter"] = report["publication_year_filter"]
@@ -536,6 +579,22 @@ def run_daily_report(settings: Settings | None = None) -> dict[str, Any]:
         out["phones_csv"] = str(phones_csv)
     if email_rows:
         out["emails_csv"] = str(emails_csv)
+    return report, analysis, csv_path, extra_attachments, out
+
+
+def run_daily_report(settings: Settings | None = None) -> dict[str, Any]:
+    settings = settings or get_settings()
+    report, analysis, csv_path, extras, out = _build_daily_report_artifacts(settings)
+    reporter = EmailReporter(settings)
+    subject = f"Facebook Monitor daily report — {report['date']} ({out['run_stamp']})"
+    sent = reporter.send_report_email(
+        subject=subject,
+        report=report,
+        analysis=analysis,
+        csv_path=csv_path,
+        extra_attachments=extras or None,
+    )
+    out["email_sent"] = sent
     return out
 
 
@@ -609,44 +668,102 @@ def send_browser_search_html_report_email(
     }
 
 
+def _browser_html_folder_stamp(folder: Path) -> str:
+    """UTC token from ``report/search_<stamp>/`` (folder basename without ``search_`` prefix)."""
+    name = folder.name
+    if name.startswith("search_"):
+        return name[len("search_") :]
+    return name
+
+
 def find_latest_browser_search_report_dir() -> Path:
-    """Return ``report/search_<stamp>/`` with the newest ``index.html`` (by mtime) under the repo."""
+    """Return ``report/search_<stamp>/`` with the newest UTC stamp in the folder name.
+
+    Uses lexicographic order on ``search_YYYYMMDDTHHMMSSZ`` (same as time order). **Not** ``index.html``
+    mtime — an older failed run can have a fresher mtime if the file was re-saved, which wrongly beat a
+    newer successful report when picking ``report-browser-html-last``.
+    """
     report = _repo_base_dir() / "report"
     if not report.is_dir():
         raise FileNotFoundError(f"no report directory: {report}")
-    candidates = list(report.glob("search_*/index.html"))
-    if not candidates:
+    dirs = [p for p in report.glob("search_*") if p.is_dir() and (p / "index.html").is_file()]
+    if not dirs:
         raise FileNotFoundError(f"no report/search_*/index.html under {report}")
-    return max(candidates, key=lambda p: p.stat().st_mtime).parent.resolve()
+    return max(dirs, key=lambda p: p.name).resolve()
 
 
 def run_daily_report_with_latest_browser_html_email(settings: Settings | None = None) -> dict[str, Any]:
-    """Run :func:`run_daily_report` then email the latest Playwright ``report/search_*`` HTML.
+    """Build the daily CSV report and send **one** email with CSVs, CSV-aligned HTML, and Playwright HTML.
 
-    JSON matches the daily ``POST /admin/report`` payload (``csv``, ``rows``, ``run_stamp``, …) and adds
-    ``html_report_dir``, ``browser_html_email_sent``, and optionally ``browser_html_attachment``.
-    If no browser HTML folder exists, daily report still succeeds; browser fields indicate skip/failure.
+    Always attaches ``daily_posts_<run_stamp>.html`` (same rows as the main CSV) plus the latest
+    ``report/search_*/index.html`` copy when available.
+
+    JSON matches the daily ``POST /admin/report`` payload (``csv``, ``rows``, ``run_stamp``, …,
+    ``daily_posts_html``, …) and adds ``html_report_dir``, ``browser_html_search_stamp``,
+    ``browser_html_email_sent``, and ``browser_html_attachment`` (Playwright file name).
+
+    ``run_stamp`` identifies **this** daily CSV build; ``browser_html_search_stamp`` identifies the
+    **browser sync** report folder for the Playwright attachment (timestamps can differ slightly).
+
+    If no ``report/search_*/index.html`` exists, falls back to :func:`run_daily_report` (daily email only)
+    and sets browser fields to indicate skip/failure.
     """
     settings = settings or get_settings()
-    out = run_daily_report(settings)
-    if not out.get("ok"):
-        return out
     try:
         d = find_latest_browser_search_report_dir()
     except FileNotFoundError as exc:
+        out = run_daily_report(settings)
         out["html_report_dir"] = None
         out["browser_html_email_sent"] = False
         out["browser_html_ok"] = False
         out["browser_html_error"] = str(exc)
         return out
-    html = send_browser_search_html_report_email(settings, report_dir=d)
-    out["html_report_dir"] = html.get("html_report_dir")
-    out["browser_html_email_sent"] = bool(html.get("email_sent"))
-    out["browser_html_ok"] = bool(html.get("ok"))
-    if html.get("attachment"):
-        out["browser_html_attachment"] = html["attachment"]
-    if not html.get("ok"):
-        out["browser_html_error"] = str(html.get("error") or "browser HTML email failed")
+
+    report, analysis, csv_path, extras, out = _build_daily_report_artifacts(settings)
+    if not out.get("ok"):
+        return out
+
+    reporter = EmailReporter(settings)
+    index = d / "index.html"
+    if not index.is_file():
+        sent = reporter.send_report_email(
+            subject=f"Facebook Monitor daily report — {report['date']} ({out['run_stamp']})",
+            report=report,
+            analysis=analysis,
+            csv_path=csv_path,
+            extra_attachments=extras or None,
+        )
+        out["email_sent"] = sent
+        out["html_report_dir"] = str(d)
+        out["browser_html_email_sent"] = False
+        out["browser_html_ok"] = False
+        out["browser_html_error"] = f"missing index.html under {d}"
+        return out
+
+    html_stamp = _browser_html_folder_stamp(d)
+    daily_stamp = out["run_stamp"]
+    tmp_attach = Path(tempfile.gettempdir()) / f"browser_search_{html_stamp}_daily_{daily_stamp}.html"
+    attach_name = tmp_attach.name
+    try:
+        shutil.copyfile(index, tmp_attach)
+        extras_all = list(extras) + [tmp_attach]
+        subject = f"Facebook Monitor daily report + browser HTML — {report['date']} ({daily_stamp})"
+        sent = reporter.send_report_email(
+            subject=subject,
+            report=report,
+            analysis=analysis,
+            csv_path=csv_path,
+            extra_attachments=extras_all,
+        )
+    finally:
+        tmp_attach.unlink(missing_ok=True)
+
+    out["email_sent"] = sent
+    out["html_report_dir"] = str(d)
+    out["browser_html_search_stamp"] = html_stamp
+    out["browser_html_email_sent"] = sent
+    out["browser_html_ok"] = True
+    out["browser_html_attachment"] = attach_name
     return out
 
 

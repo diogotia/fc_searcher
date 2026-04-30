@@ -40,6 +40,57 @@ def test_run_daily_report_csv_paths_include_run_stamp(monkeypatch, tmp_path):
     csv_p = Path(out["csv"])
     assert csv_p.name == f"report_{out['date']}_{stamp}.csv"
     assert csv_p.is_file()
+    daily_html = Path(out["daily_posts_html"])
+    assert daily_html.is_file()
+    assert daily_html.name == f"daily_posts_{stamp}.html"
+
+
+def test_run_daily_report_with_latest_sends_one_email_with_csv_and_browser_html(monkeypatch, tmp_path):
+    """Combined admin flow attaches daily CSV (+ contact CSVs) and browser HTML in one message."""
+    repo = tmp_path / "checkout"
+    _stub_fc_repo_root(repo)
+    (repo / "report" / "search_combo").mkdir(parents=True)
+    (repo / "report" / "search_combo" / "index.html").write_text("<html>playwright</html>", encoding="utf-8")
+    monkeypatch.setenv("FC_SEARCHER_REPO_ROOT", str(repo))
+
+    rep_dir = tmp_path / "reports"
+    rep_dir.mkdir()
+    monkeypatch.setenv("REPORTS_DIR", str(rep_dir))
+    _reset_db(monkeypatch, tmp_path, "combo_email.db")
+
+    calls: list[dict] = []
+
+    def fake_send(self, *, subject, report, analysis, csv_path=None, extra_attachments=None):
+        calls.append(
+            {
+                "subject": subject,
+                "csv_path": csv_path,
+                "extras": list(extra_attachments or []),
+            }
+        )
+        return True
+
+    monkeypatch.setattr(pl.EmailReporter, "send_report_email", fake_send)
+    settings = get_settings()
+    out = pl.run_daily_report_with_latest_browser_html_email(settings)
+    assert out["ok"] is True
+    assert out["email_sent"] is True
+    assert out["browser_html_email_sent"] is True
+    assert len(calls) == 1
+    assert "browser HTML" in calls[0]["subject"]
+    assert calls[0]["csv_path"] is not None
+    assert calls[0]["csv_path"].suffix == ".csv"
+    extras = calls[0]["extras"]
+    assert any(p.name.startswith("browser_search_") and p.suffix == ".html" for p in extras)
+    assert out["browser_html_search_stamp"] == "combo"
+    assert "_daily_" in out["browser_html_attachment"]
+    assert out["browser_html_attachment"].endswith(".html")
+    assert "daily_posts_" in out["daily_posts_html"]
+    assert Path(out["daily_posts_html"]).is_file()
+    html_paths = [p for p in extras if p.suffix == ".html"]
+    assert len(html_paths) == 2
+    assert any("daily_posts_" in p.name for p in html_paths)
+    assert any("browser_search_" in p.name for p in html_paths)
 
 
 def test_build_report_context_respects_publication_year_filter(monkeypatch, tmp_path):

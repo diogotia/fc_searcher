@@ -150,8 +150,11 @@ Set `ADMIN_TOKEN` in `.env`, then either use curl or the helper (loads `.env` sa
 ```bash
 ./scripts/admin_request.sh sync    # needs FACEBOOK_ACCESS_TOKEN + FACEBOOK_GROUP_IDS
 ./scripts/admin_request.sh report  # builds CSV under ./reports; email if SMTP set
+./scripts/admin_request.sh report-browser-html-last   # one email: daily CSVs + latest report/search_*/index.html
 ./scripts/admin_request.sh search berlin --limit 20   # substring search on stored posts
 ```
+
+For **`report-browser-html-last`**, the email includes the main **CSV**, **`daily_posts_<run_stamp>.html`** (HTML table with the **same rows** as that CSV), and a copy of the latest Playwright **`report/search_*/index.html`** (`browser_search_<browser_html_search_stamp>_daily_<run_stamp>.html`). JSON includes **`daily_posts_html`** (path to the CSV-aligned file), **`run_stamp`** (daily build id), and **`browser_html_search_stamp`** (Playwright folder UTC id).
 
 With curl (after `export ADMIN_TOKEN=...` from `.env`):
 
@@ -185,12 +188,22 @@ Set these env vars to enable it:
 
 - `ENABLE_BROWSER_SEARCH_SYNC=true`
 - `BROWSER_SEARCH_QUERY=job` — phrase for **global** Facebook group discovery (`/search/groups/?q=`)
-- Optional: `BROWSER_IN_GROUP_SEARCH_QUERY` — phrase for each group’s **in-group** search (`/groups/{id}/search/?q=`); when unset, the same value as `BROWSER_SEARCH_QUERY` is used
-- `BROWSER_GROUP_SCAN_LIMIT=20`
+- Optional: `BROWSER_IN_GROUP_SEARCH_QUERY` — comma-separated **tokens**; each group search phase uses **`BROWSER_SEARCH_QUERY` + space + token** (e.g. `ищу работу` + `малярные работы`). When unset, `BROWSER_SEARCH_QUERY` alone is used for in-group search
+- `BROWSER_GROUP_SCAN_LIMIT=20` (max **100**; caps **Facebook `/search/groups`** picks only — **every** `BROWSER_SEED_GROUP_URLS` entry is still scanned, then up to this many extra groups from search)
 - `BROWSER_POST_LIMIT_PER_GROUP=25`
 - `BROWSER_HEADLESS=false`
 - `BROWSER_SEARCH_TIMEOUT_SECONDS=45`
 - Optional: `BROWSER_SEED_GROUP_URLS` — comma-separated `https://www.facebook.com/groups/NUMERIC_ID/...` URLs or numeric ids; each is opened **before** results from Facebook group search (so you can always include a known group).
+
+#### Maximizing distinct groups (and reading the daily CSV)
+
+- **Daily report CSV rows are per post**, not per group. The `group_id` column repeats whenever several posts came from the same Facebook group (expected).
+- **One global discovery query per browser run**: `BROWSER_SEARCH_QUERY` (or JSON `query` / CLI `--query`) drives a single `/search/groups/?q=…` pass. Different wording (language, city, niche) usually surfaces different group links.
+- **Hard cap (discovery only)**: `BROWSER_GROUP_SCAN_LIMIT` and admin `group_limit` are clamped to **100** in code and limit only how many **extra** groups are taken from `/search/groups`. Values above 100 have no effect on discovery.
+- **Raise the cap** (up to 100): set `BROWSER_GROUP_SCAN_LIMIT=100` in `.env`, or pass `"group_limit": 100` to `POST /admin/browser-search-sync`, or `--group-limit 100` on `scripts/run_browser_search_once.py`. With Docker, `.env` is mounted read-only in `docker-compose.yml`; after editing, run `docker compose up -d --force-recreate` so the container reloads it (changing only `src/` still needs `docker compose build` to refresh the image).
+- **Seeds**: `BROWSER_SEED_GROUP_URLS` (and optional `seed_group_urls` in the admin JSON) list groups that are **all** opened and searched; the scan limit does **not** truncate seeds. Discovery groups are added after seeds, up to the limit.
+- **More groups over time**: run additional passes with **different** `query` / `BROWSER_SEARCH_QUERY` (or different seeds) so the database accumulates more distinct `group_id`s across runs.
+- **More posts, not more groups**: comma-separated `BROWSER_IN_GROUP_SEARCH_QUERY` (prefixed phases) or JSON `in_group_queries` runs multiple `/groups/…/search/?q=` phrases on the **same** merged group list in one session. JSON `in_group_queries` is passed through **without** auto-prefix (full control from the client).
 
 The first version expects a human to complete Facebook login in the opened browser window during the run.
 

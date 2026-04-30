@@ -67,9 +67,14 @@ class Settings(BaseSettings):
     browser_in_group_search_query: str = Field(
         default="",
         validation_alias=AliasChoices("BROWSER_IN_GROUP_SEARCH_QUERY", "browser_in_group_search_query"),
-        description="Optional `q` for each group's /groups/{id}/search/?q=... (in-group search). Empty = use BROWSER_SEARCH_QUERY",
+        description="Comma-separated tokens: each becomes /groups/{id}/search/?q= with BROWSER_SEARCH_QUERY prefixed. "
+        "Single token not equal to BROWSER_SEARCH_QUERY is prefixed. Empty = use BROWSER_SEARCH_QUERY only.",
     )
-    browser_group_scan_limit: int = Field(default=20, validation_alias="BROWSER_GROUP_SCAN_LIMIT")
+    browser_group_scan_limit: int = Field(
+        default=20,
+        validation_alias="BROWSER_GROUP_SCAN_LIMIT",
+        description="Max groups taken from Facebook /search/groups (1..100). BROWSER_SEED_GROUP_URLS are always kept in full, then this many discovery groups are added.",
+    )
     browser_post_limit_per_group: int = Field(default=25, validation_alias="BROWSER_POST_LIMIT_PER_GROUP")
     browser_headless: bool = Field(default=False, validation_alias="BROWSER_HEADLESS")
     browser_seed_group_urls: str = Field(

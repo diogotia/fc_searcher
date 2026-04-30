@@ -7,6 +7,7 @@ from src.services.browser_search import (
     BrowserAutomationError,
     BrowserFoundPost,
     DiscoveredGroup,
+    build_in_group_phrases_for_settings,
     infer_publication_date_from_browser_post,
     infer_publication_year_from_browser_post,
     post_matches_global_message_filter,
@@ -80,6 +81,41 @@ def test_build_group_search_url_encodes_cyrillic_in_group():
     url = build_group_search_url("https://www.facebook.com/groups/934750153812574", "ищу работу")
     assert "934750153812574/search/?q=" in url
     assert "%D0%B8%D1%89%D1%83" in url
+
+
+def test_build_in_group_phrases_comma_list_prefixes_search_query():
+    phrases = build_in_group_phrases_for_settings(
+        "ищу работу",
+        in_group_query=None,
+        settings_in_group="малярные работы, монтаж гипсокартона ,электромонтажные",
+    )
+    assert phrases == [
+        "ищу работу малярные работы",
+        "ищу работу монтаж гипсокартона",
+        "ищу работу электромонтажные",
+    ]
+
+
+def test_build_in_group_phrases_single_token_prefixes_when_different():
+    phrases = build_in_group_phrases_for_settings(
+        "job",
+        in_group_query="Berlin",
+        settings_in_group="",
+    )
+    assert phrases == ["job Berlin"]
+
+
+def test_build_in_group_phrases_single_token_same_as_search_collapses():
+    phrases = build_in_group_phrases_for_settings(
+        "job",
+        in_group_query="job",
+        settings_in_group="",
+    )
+    assert phrases == ["job"]
+
+
+def test_build_in_group_phrases_empty_settings_uses_search_only():
+    assert build_in_group_phrases_for_settings("x", in_group_query=None, settings_in_group="") == ["x"]
 
 
 def test_parse_seed_group_urls_accepts_url_and_numeric():
@@ -221,7 +257,23 @@ def test_merge_discovered_group_lists_dedupes_and_prioritizes():
     a = DiscoveredGroup(group_name="A", group_url="https://www.facebook.com/groups/1", group_id="1")
     b = DiscoveredGroup(group_name="B", group_url="https://www.facebook.com/groups/2", group_id="2")
     c = DiscoveredGroup(group_name="C", group_url="https://www.facebook.com/groups/1", group_id="1")
-    merged = merge_discovered_group_lists([a], [b, c], limit=10)
+    merged = merge_discovered_group_lists([a], [b, c], discovery_limit=10)
     assert len(merged) == 2
     assert merged[0].group_id == "1"
     assert merged[1].group_id == "2"
+
+
+def test_merge_discovered_group_lists_keeps_all_seeds_caps_discovery_only():
+    """Seeds are never dropped when discovery_limit is small; limit applies only to /search/groups picks."""
+    seeds = [
+        DiscoveredGroup(group_name="S1", group_url="https://www.facebook.com/groups/101", group_id="101"),
+        DiscoveredGroup(group_name="S2", group_url="https://www.facebook.com/groups/102", group_id="102"),
+        DiscoveredGroup(group_name="S3", group_url="https://www.facebook.com/groups/103", group_id="103"),
+    ]
+    discovered = [
+        DiscoveredGroup(group_name="D1", group_url="https://www.facebook.com/groups/201", group_id="201"),
+        DiscoveredGroup(group_name="D2", group_url="https://www.facebook.com/groups/202", group_id="202"),
+        DiscoveredGroup(group_name="D3", group_url="https://www.facebook.com/groups/203", group_id="203"),
+    ]
+    merged = merge_discovered_group_lists(seeds, discovered, discovery_limit=2)
+    assert [g.group_id for g in merged] == ["101", "102", "103", "201", "202"]

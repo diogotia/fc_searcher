@@ -2,8 +2,10 @@
 """Send the **daily database report** plus the **latest** Playwright HTML (same idea as ``report-browser-html-last``).
 
 By default runs :func:`run_daily_report_with_latest_browser_html_email` — same JSON shape as
-``POST /admin/report`` (``csv``, ``rows``, ``run_stamp``, ``publication_*``, …) and attaches the
-newest ``report/search_*/index.html`` in a **second** email.
+``POST /admin/report`` (``csv``, ``rows``, ``run_stamp``, ``publication_*``, …) and sends **one**
+email whose attachments include the daily CSV (and contact CSVs when present), a
+``daily_posts_<run_stamp>.html`` file (same rows as the CSV), plus the newest
+``report/search_*/index.html`` as ``browser_search_<search_stamp>_daily_<run_stamp>.html``.
 
 Use ``--html-only`` to only email the latest browser HTML (no daily CSV / Claude / DB report email).
 
