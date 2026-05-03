@@ -12,9 +12,12 @@ env:
 jobs:
   lint-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
+      # Pin minor releases; bare @v8 is not published as a tag on astral-sh/setup-uv.
       - name: Install uv and Python 3.12
         uses: astral-sh/setup-uv@v8.1.0
         with:
@@ -33,6 +36,7 @@ jobs:
           DATABASE_URL: sqlite:////tmp/facebook_monitor_ci.db
           ENABLE_SCHEDULER: "false"
           ADMIN_TOKEN: test-admin-token
+          RUNNING_PYTEST: "1"
         run: uv run pytest -q
 
   build-push:
