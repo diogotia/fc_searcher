@@ -118,7 +118,7 @@ def main() -> int:
 
     load_dotenv_file()
     try:
-        from src.config import get_settings  # noqa: E402
+        from src.config import clear_settings_caches, get_settings  # noqa: E402
         from src.db.session import init_db, init_engine  # noqa: E402
         from src.services.pipeline import run_daily_report  # noqa: E402
     except ModuleNotFoundError as exc:
@@ -130,7 +130,7 @@ def main() -> int:
             return 2
         raise
 
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     init_engine(settings.database_url)
     init_db()

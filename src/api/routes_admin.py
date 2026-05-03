@@ -8,6 +8,7 @@ from typing import Any
 from flask import Blueprint, abort, jsonify, request
 
 from src.config import Settings, get_settings, reload_settings_if_dotenv_mounted
+from src.services.agentic_facebook import run_agentic_facebook_sync
 from src.services.pipeline import (
     run_analyze_recent,
     run_browser_search_sync,
@@ -128,6 +129,66 @@ def admin_browser_search_sync() -> tuple[Any, int]:
             post_limit_per_group=post_limit_per_group,
             seed_group_urls=seed_group_urls,
             global_message_contains=global_message_contains,
+        ),
+    )
+
+
+@bp.post("/agentic-facebook-sync")
+def admin_agentic_facebook_sync() -> tuple[Any, int]:
+    _require_admin()
+    payload = request.get_json(silent=True) or {}
+    query = payload.get("query")
+    in_group_query = payload.get("in_group_query")
+    raw_igq = payload.get("in_group_queries")
+    in_group_queries: list[str] | None = None
+    if isinstance(raw_igq, list):
+        in_group_queries = [str(x).strip() for x in raw_igq if str(x).strip()]
+        if not in_group_queries:
+            in_group_queries = None
+    raw_gmc = payload.get("global_message_contains")
+    global_message_contains = str(raw_gmc).strip() if raw_gmc is not None else None
+    if not global_message_contains:
+        global_message_contains = None
+    group_limit = payload.get("group_limit")
+    post_limit_per_group = payload.get("post_limit_per_group")
+    raw_seed = payload.get("seed_group_urls")
+    if raw_seed is None:
+        seed_group_urls = None
+    elif isinstance(raw_seed, list):
+        seed_group_urls = ",".join(str(x).strip() for x in raw_seed if str(x).strip())
+    else:
+        seed_group_urls = str(raw_seed).strip() or None
+    raw_exact = payload.get("in_group_exact_keywords")
+    if raw_exact is None:
+        in_group_exact_keywords = False
+    elif isinstance(raw_exact, bool):
+        in_group_exact_keywords = raw_exact
+    elif isinstance(raw_exact, str):
+        in_group_exact_keywords = raw_exact.strip().lower() in {"1", "true", "yes", "on"}
+    else:
+        in_group_exact_keywords = bool(raw_exact)
+    raw_fb_year = payload.get("facebook_ui_year_filter")
+    if raw_fb_year is None:
+        facebook_ui_year_filter = False
+    elif isinstance(raw_fb_year, bool):
+        facebook_ui_year_filter = raw_fb_year
+    elif isinstance(raw_fb_year, str):
+        facebook_ui_year_filter = raw_fb_year.strip().lower() in {"1", "true", "yes", "on"}
+    else:
+        facebook_ui_year_filter = bool(raw_fb_year)
+    return _safe_run(
+        "agentic-facebook-sync",
+        lambda: run_agentic_facebook_sync(
+            _settings(),
+            query=query,
+            in_group_query=in_group_query,
+            in_group_queries=in_group_queries,
+            group_limit=group_limit,
+            post_limit_per_group=post_limit_per_group,
+            seed_group_urls=seed_group_urls,
+            global_message_contains=global_message_contains,
+            in_group_exact_keywords=in_group_exact_keywords,
+            facebook_ui_year_filter=facebook_ui_year_filter,
         ),
     )
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.config import get_settings
+from src.config import clear_settings_caches, get_settings
 from src.db.session import init_db, init_engine
 from src.services import pipeline as pl
 
@@ -16,7 +16,7 @@ def _stub_fc_repo_root(path: Path) -> None:
 def _reset_db(monkeypatch, tmp_path, name: str) -> None:
     db_path = tmp_path / name
     monkeypatch.setenv("DATABASE_URL", f"sqlite:////{db_path}")
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     init_engine(settings.database_url)
     init_db()
@@ -104,7 +104,7 @@ def test_build_report_context_respects_publication_year_filter(monkeypatch, tmp_
     monkeypatch.delenv("BROWSER_POST_PUBLICATION_DAY", raising=False)
     _reset_db(monkeypatch, tmp_path, "report-year.db")
     monkeypatch.setenv("BROWSER_POST_PUBLICATION_YEAR", "2026")
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     with get_session() as session:
         session.add(
@@ -153,7 +153,7 @@ def test_build_report_context_respects_publication_from_date(monkeypatch, tmp_pa
     monkeypatch.setenv("BROWSER_POST_PUBLICATION_YEAR", "2026")
     monkeypatch.setenv("BROWSER_POST_PUBLICATION_MONTH", "4")
     monkeypatch.setenv("BROWSER_POST_PUBLICATION_DAY", "27")
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     with get_session() as session:
         session.add(
@@ -198,7 +198,7 @@ def test_build_report_context_publication_year_keep_unknown(monkeypatch, tmp_pat
     _reset_db(monkeypatch, tmp_path, "report-year-unknown.db")
     monkeypatch.setenv("BROWSER_POST_PUBLICATION_YEAR", "2026")
     monkeypatch.setenv("BROWSER_POST_PUBLICATION_KEEP_UNKNOWN_YEAR", "true")
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     with get_session() as session:
         session.add(
@@ -631,3 +631,20 @@ def test_upsert_posts_deduplicates_duplicate_ids_in_one_batch(monkeypatch, tmp_p
         row = session.scalar(select(Post).where(Post.id == "same_id"))
         assert row is not None
         assert row.message == "second wins"
+
+
+def test_run_agentic_facebook_sync_disabled_returns_html_report(monkeypatch, tmp_path):
+    """Same operator-facing shape as browser sync: disabled runs still emit html_report_dir."""
+    from src.services.agentic_facebook import sync as af
+
+    _stub_fc_repo_root(tmp_path)
+    monkeypatch.setenv("FC_SEARCHER_REPO_ROOT", str(tmp_path))
+    monkeypatch.delenv("ENABLE_AGENTIC_FACEBOOK_SYNC", raising=False)
+    _reset_db(monkeypatch, tmp_path, "agentic-pipeline-disabled.db")
+
+    out = af.run_agentic_facebook_sync(query="job")
+    assert out["ok"] is False
+    assert out["flow"] == "agentic_facebook"
+    assert "disabled" in (out.get("error") or "")
+    assert out.get("html_report_dir")
+    assert (tmp_path / "report").is_dir()

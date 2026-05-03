@@ -31,6 +31,7 @@ from src.services.browser_search import (
     run_browser_group_search,
 )
 from src.services.browser_search_html_report import write_browser_search_html_report
+from src.config_anthropic import get_anthropic_settings
 from src.services.claude_analyzer import ClaudeAnalyzer
 from src.services.daily_report_rows_html import write_daily_report_rows_html
 from src.services.email_reporter import EmailReporter
@@ -230,9 +231,9 @@ def run_sync(settings: Settings | None = None) -> dict[str, Any]:
 
 def run_analyze_recent(settings: Settings | None = None, *, limit_posts: int = 30) -> dict[str, Any]:
     settings = settings or get_settings()
-    if not settings.anthropic_api_key:
+    if not get_anthropic_settings().anthropic_api_key:
         return {"ok": False, "error": "ANTHROPIC_API_KEY not set", "analyzed": 0}
-    analyzer = ClaudeAnalyzer(settings)
+    analyzer = ClaudeAnalyzer()
     analyzed = 0
     with get_session() as session:
         stmt = select(Post).order_by(Post.fetched_at.desc()).limit(limit_posts)
@@ -254,7 +255,7 @@ def run_analyze_recent(settings: Settings | None = None, *, limit_posts: int = 3
             session.add(
                 Analysis(
                     post_id=posts[0].id,
-                    model=settings.claude_model,
+                    model=get_anthropic_settings().claude_model,
                     summary=batch.get("summary") or "",
                     trends_json={
                         "trends": batch.get("trends"),
@@ -534,8 +535,8 @@ def _build_daily_report_artifacts(
     with get_session() as session:
         report, rows = build_report_context(session, settings)
         analysis: dict[str, Any]
-        if settings.anthropic_api_key:
-            analyzer = ClaudeAnalyzer(settings)
+        if get_anthropic_settings().anthropic_api_key:
+            analyzer = ClaudeAnalyzer()
             analysis = analyzer.analyze_posts(rows[:80], settings.keyword_list())
         else:
             analysis = {"summary": "AI analysis skipped (no ANTHROPIC_API_KEY).", "trends": [], "recommendations": []}

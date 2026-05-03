@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.config import get_settings
+from src.config import clear_settings_caches, get_settings
 from src.services.facebook_client import FacebookClient
 
 
@@ -10,7 +10,7 @@ def test_mock_feed_loads_and_prefixes_ids(monkeypatch, tmp_path):
     fixture = Path(__file__).resolve().parent / "fixtures" / "sample_group_feed.json"
     monkeypatch.setenv("FACEBOOK_MOCK_FEED_JSON", str(fixture))
     monkeypatch.setenv("FACEBOOK_ACCESS_TOKEN", "")
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     client = FacebookClient(settings)
     out = client.fetch_group_feed_with_diagnostics("999", limit=10)
@@ -26,7 +26,7 @@ def test_mock_feed_keyword_search(monkeypatch):
     fixture = Path(__file__).resolve().parent / "fixtures" / "sample_group_feed.json"
     monkeypatch.setenv("FACEBOOK_MOCK_FEED_JSON", str(fixture))
     monkeypatch.setenv("FACEBOOK_ACCESS_TOKEN", "")
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     client = FacebookClient(settings)
     hits = client.search_group_feed_keyword("999", "Berlin", max_posts_scan=50)

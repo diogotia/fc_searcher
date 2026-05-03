@@ -12,8 +12,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from src.config import get_settings
+from src.config import clear_settings_caches, get_settings
 from src.db.session import init_db, init_engine
+from src.services.agentic_facebook import run_agentic_facebook_sync
 from src.services.facebook_client import FacebookClient
 from src.services.pipeline import run_browser_search_sync, run_daily_report, run_sync
 
@@ -23,7 +24,7 @@ def main() -> None:
         load_dotenv()
     _repo = Path(__file__).resolve().parent.parent
     os.environ.setdefault("FC_SEARCHER_REPO_ROOT", str(_repo))
-    get_settings.cache_clear()
+    clear_settings_caches()
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover
@@ -98,6 +99,39 @@ def main() -> None:
                 post_limit_per_group=post_limit_per_group,
                 seed_group_urls=seed_group_urls,
                 global_message_contains=global_message_contains,
+            )
+        )
+
+    @mcp.tool()
+    def facebook_agentic_browser_sync(
+        query: str | None = None,
+        in_group_query: str | None = None,
+        in_group_queries: list[str] | None = None,
+        group_limit: int | None = None,
+        post_limit_per_group: int | None = None,
+        seed_group_urls: str | None = None,
+        global_message_contains: str | None = None,
+        in_group_exact_keywords: bool = False,
+        facebook_ui_year_filter: bool = False,
+    ) -> str:
+        """Opt-in agentic Facebook flow, isolated from `facebook_browser_search_sync`.
+
+        Requires `ENABLE_AGENTIC_FACEBOOK_SYNC=true`. Reuses the browser search primitives but writes
+        rows with source `playwright_agentic` by default and stores artifacts under
+        `AGENTIC_FACEBOOK_OUTPUT_DIR` (`output/agentic_facebook` by default).
+        """
+        return str(
+            run_agentic_facebook_sync(
+                get_settings(),
+                query=query,
+                in_group_query=in_group_query,
+                in_group_queries=in_group_queries,
+                group_limit=group_limit,
+                post_limit_per_group=post_limit_per_group,
+                seed_group_urls=seed_group_urls,
+                global_message_contains=global_message_contains,
+                in_group_exact_keywords=in_group_exact_keywords,
+                facebook_ui_year_filter=facebook_ui_year_filter,
             )
         )
 

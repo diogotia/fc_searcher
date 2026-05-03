@@ -12,7 +12,7 @@ from flask import Flask
 from src.api.routes_admin import bp as admin_bp
 from src.api.routes_health import bp as health_bp
 from src.api.routes_public_search import bp as public_search_bp
-from src.config import get_settings
+from src.config import clear_settings_caches, get_settings
 from src.db.session import init_db, init_engine
 from src.jobs.scheduler import start_scheduler
 from src.webhooks.facebook_webhook import bp as fb_webhook_bp
@@ -26,7 +26,7 @@ def create_app() -> Flask:
     if str(Path.cwd()) not in sys.path:
         sys.path.insert(0, str(Path.cwd()))
 
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     logging.basicConfig(
         level=getattr(logging, settings.log_level, logging.INFO),

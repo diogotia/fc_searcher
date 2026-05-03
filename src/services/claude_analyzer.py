@@ -7,7 +7,7 @@ from typing import Any
 
 from anthropic import Anthropic
 
-from src.config import Settings
+from src.config_anthropic import get_anthropic_settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +21,12 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 
 
 class ClaudeAnalyzer:
-    def __init__(self, settings: Settings) -> None:
-        if not settings.anthropic_api_key:
+    def __init__(self) -> None:
+        ai = get_anthropic_settings()
+        if not ai.anthropic_api_key:
             raise ValueError("ANTHROPIC_API_KEY is not configured")
-        self._client = Anthropic(api_key=settings.anthropic_api_key)
-        self._model = settings.claude_model
+        self._client = Anthropic(api_key=ai.anthropic_api_key)
+        self._model = ai.claude_model
 
     def analyze_posts(self, posts: list[dict[str, Any]], keywords: list[str]) -> dict[str, Any]:
         if not posts:

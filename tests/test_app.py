@@ -11,6 +11,7 @@ def test_health(client):
     assert "facebook_sync_mode" in data
     assert data.get("enable_public_post_search") is False
     assert data.get("enable_browser_search_sync") is False
+    assert data.get("enable_agentic_facebook_sync") is False
     assert data.get("browser_search_query") == "job"
     assert data.get("browser_headless") is False
     assert data.get("browser_seed_group_urls_configured") is False
@@ -230,6 +231,50 @@ def test_admin_browser_search_sync_forwards_in_group_queries(client, monkeypatch
     )
     assert resp.status_code == 200
     assert captured.get("in_group_queries") == ["ищу работу", "рабочий строительства"]
+
+
+def test_admin_agentic_facebook_sync_requires_token(client):
+    resp = client.post("/admin/agentic-facebook-sync")
+    assert resp.status_code == 401
+
+
+def test_admin_agentic_facebook_sync_disabled_by_default(client):
+    resp = client.post("/admin/agentic-facebook-sync", headers={"X-Admin-Token": "test-admin-token"})
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["ok"] is False
+    assert "disabled" in body["error"]
+
+
+def test_admin_agentic_facebook_sync_forwards_payload(client, monkeypatch):
+    captured: dict[str, object] = {}
+
+    def _fake_run(settings, **kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "flow": "agentic_facebook", "errors": []}
+
+    monkeypatch.setattr("src.api.routes_admin.run_agentic_facebook_sync", _fake_run)
+    resp = client.post(
+        "/admin/agentic-facebook-sync",
+        headers={"X-Admin-Token": "test-admin-token"},
+        json={
+            "query": "designer",
+            "in_group_query": "Berlin",
+            "group_limit": 4,
+            "post_limit_per_group": 12,
+            "seed_group_urls": "https://www.facebook.com/groups/111",
+            "global_message_contains": "hiring",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert captured.get("query") == "designer"
+    assert captured.get("in_group_query") == "Berlin"
+    assert captured.get("group_limit") == 4
+    assert captured.get("post_limit_per_group") == 12
+    assert captured.get("seed_group_urls") == "https://www.facebook.com/groups/111"
+    assert captured.get("global_message_contains") == "hiring"
 
 
 def test_admin_posts_search_requires_q(client):

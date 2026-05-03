@@ -54,14 +54,14 @@ def main() -> int:
     )
     args = p.parse_args()
 
-    from src.config import get_settings  # noqa: E402
+    from src.config import clear_settings_caches, get_settings  # noqa: E402
     from src.services.pipeline import (  # noqa: E402
         find_latest_browser_search_report_dir,
         run_daily_report_with_latest_browser_html_email,
         send_browser_search_html_report_email,
     )
 
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
 
     if args.print_only:

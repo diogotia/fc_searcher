@@ -42,9 +42,6 @@ class Settings(BaseSettings):
         description="groups = /{group-id}/feed; me = /me/feed (no FACEBOOK_GROUP_IDS required)",
     )
 
-    anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
-    claude_model: str = Field(default="claude-3-5-sonnet-20241022", validation_alias="CLAUDE_MODEL")
-
     smtp_server: str = Field(default="smtp.gmail.com", validation_alias="SMTP_SERVER")
     smtp_port: int = Field(default=587, validation_alias="SMTP_PORT")
     smtp_user: str | None = Field(default=None, validation_alias="SMTP_USER")
@@ -137,6 +134,21 @@ class Settings(BaseSettings):
         ),
         description="When true and ANTHROPIC_API_KEY is set, try Claude vision + ArrowRight/Submit on Meta post-login visual puzzles (fragile; off by default)",
     )
+    enable_agentic_facebook_sync: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ENABLE_AGENTIC_FACEBOOK_SYNC", "enable_agentic_facebook_sync"),
+        description="Opt-in separate agentic Facebook browser flow; does not affect ENABLE_BROWSER_SEARCH_SYNC.",
+    )
+    agentic_facebook_output_dir: str = Field(
+        default="output/agentic_facebook",
+        validation_alias=AliasChoices("AGENTIC_FACEBOOK_OUTPUT_DIR", "agentic_facebook_output_dir"),
+        description="Artifact root for the isolated agentic Facebook flow.",
+    )
+    agentic_facebook_source: str = Field(
+        default="playwright_agentic",
+        validation_alias=AliasChoices("AGENTIC_FACEBOOK_SOURCE", "agentic_facebook_source"),
+        description="Post.source value used for rows written by the agentic Facebook flow.",
+    )
 
     @field_validator(
         "enable_scheduler",
@@ -145,6 +157,7 @@ class Settings(BaseSettings):
         "browser_headless",
         "enable_browser_meta_challenge_vision",
         "browser_post_publication_keep_unknown_year",
+        "enable_agentic_facebook_sync",
         mode="before",
     )
     @classmethod
@@ -173,6 +186,8 @@ class Settings(BaseSettings):
         "browser_search_query",
         "browser_in_group_search_query",
         "browser_seed_group_urls",
+        "agentic_facebook_output_dir",
+        "agentic_facebook_source",
         mode="before",
     )
     @classmethod
@@ -308,6 +323,14 @@ def get_settings() -> Settings:
     return Settings()
 
 
+def clear_settings_caches() -> None:
+    """Invalidate both main settings and Anthropic settings (same env, separate caches)."""
+    get_settings.cache_clear()
+    from src.config_anthropic import get_anthropic_settings
+
+    get_anthropic_settings.cache_clear()
+
+
 def reload_settings_if_dotenv_mounted() -> None:
     """If host `.env` is mounted at `/app/.env`, merge it into `os.environ` and invalidate settings cache.
 
@@ -324,4 +347,4 @@ def reload_settings_if_dotenv_mounted() -> None:
     if not path.is_file():
         return
     load_dotenv(path, override=True)
-    get_settings.cache_clear()
+    clear_settings_caches()

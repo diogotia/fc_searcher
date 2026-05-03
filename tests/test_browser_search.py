@@ -7,9 +7,11 @@ from src.services.browser_search import (
     BrowserAutomationError,
     BrowserFoundPost,
     DiscoveredGroup,
+    build_body_keyword_needles,
     build_in_group_phrases_for_settings,
     infer_publication_date_from_browser_post,
     infer_publication_year_from_browser_post,
+    post_matches_body_keyword_union,
     post_matches_global_message_filter,
     post_publication_matches_settings_filter,
     post_publication_year_matches_filter,
@@ -251,6 +253,26 @@ def test_post_matches_global_message_filter():
     assert post_matches_global_message_filter("No match here", "ищу работу") is False
     assert post_matches_global_message_filter("x", None) is True
     assert post_matches_global_message_filter("x", "") is True
+
+
+def test_build_body_keyword_needles_dedupes_and_orders_phrases_then_discovery():
+    needles = build_body_keyword_needles(
+        "ищу работу в Германии",
+        ["ищу работу Бетонщик", "ищу работу Бетонщик", "ищу работу Арматурщик"],
+    )
+    assert needles == [
+        "ищу работу Бетонщик",
+        "ищу работу Арматурщик",
+        "ищу работу в Германии",
+    ]
+
+
+def test_post_matches_body_keyword_union():
+    needles = ["ищу работу Бетонщик", "ищу работу в Германии"]
+    assert post_matches_body_keyword_union("Вакансия ищу работу Бетонщик в Munich", needles) is True
+    assert post_matches_body_keyword_union("ищу работу в Германии только", needles) is True
+    assert post_matches_body_keyword_union("Другое объявление", needles) is False
+    assert post_matches_body_keyword_union("x", []) is True
 
 
 def test_merge_discovered_group_lists_dedupes_and_prioritizes():

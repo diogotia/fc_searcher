@@ -218,7 +218,7 @@ def main() -> int:
 
     load_dotenv_file()
     try:
-        from src.config import get_settings  # noqa: E402
+        from src.config import clear_settings_caches, get_settings  # noqa: E402
         from src.data.specialized_construction_hashtags import (  # noqa: E402
             SPECIALIZED_CONSTRUCTION_TAGS,
             merge_parent_in_group_with_additional,
@@ -302,7 +302,7 @@ def main() -> int:
     for i, ph in enumerate(phrases, 1):
         print(f"  {i}. {ph}", file=sys.stderr)
 
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     from src.db.session import init_db, init_engine  # noqa: E402
 

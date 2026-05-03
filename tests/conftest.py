@@ -20,6 +20,7 @@ def _create_test_app(tmp_path, monkeypatch, *, public_search: bool) -> object:
     monkeypatch.delenv("FACEBOOK_MOCK_FEED_JSON", raising=False)
     monkeypatch.delenv("FACEBOOK_SYNC_MODE", raising=False)
     monkeypatch.delenv("ENABLE_BROWSER_SEARCH_SYNC", raising=False)
+    monkeypatch.delenv("ENABLE_AGENTIC_FACEBOOK_SYNC", raising=False)
     monkeypatch.delenv("BROWSER_SEED_GROUP_URLS", raising=False)
     if public_search:
         monkeypatch.setenv("ENABLE_PUBLIC_POST_SEARCH", "true")

@@ -66,10 +66,10 @@ def main() -> int:
     )
     args = p.parse_args()
 
-    from src.config import get_settings  # noqa: E402
+    from src.config import clear_settings_caches, get_settings  # noqa: E402
     from src.services.pipeline import send_browser_search_html_report_email  # noqa: E402
 
-    get_settings.cache_clear()
+    clear_settings_caches()
     settings = get_settings()
     if args.report_dir is not None:
         out = send_browser_search_html_report_email(settings, report_dir=args.report_dir)

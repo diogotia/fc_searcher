@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Run one browser search sync using project `.env` (same pipeline as MCP `facebook_browser_search_sync`).
+"""Run agentic Facebook sync once with Anthropic env available (duplicate of ``run_agentic_facebook_once.py``).
 
-For **parent search + construction hashtag passes**, use
-``scripts/run_browser_search_parent_then_construction_tags.py``.
+Same CLI and behavior as ``run_agentic_facebook_once.py``, but **does not** strip
+``ANTHROPIC_API_KEY`` / ``CLAUDE_MODEL``. Optional Meta login challenge vision
+(``ENABLE_BROWSER_META_CHALLENGE_VISION``) can use Claude when configured.
 
-Requires Python 3.10+ (fc_searcher uses `str | None` etc.). Requires `ENABLE_BROWSER_SEARCH_SYNC=true`
-and other browser vars in `.env`. Optional `BROWSER_SEED_GROUP_URLS` is read after `.env` is loaded.
+Usage::
 
-Usage (from repo root):
+    .venv/bin/python scripts/run_agentic_facebook_once_anthropic.py
 
-    .venv/bin/python scripts/run_browser_search_once.py
-
-Use a venv created with **Homebrew `python3.12`** (not Apple `python3` / not a 3.9 venv). See README → MCP.
+For runs that must not touch Anthropic at all, use ``run_agentic_facebook_once.py``.
 """
 
 from __future__ import annotations
@@ -35,7 +33,6 @@ from load_repo_env import load_dotenv_file  # noqa: E402
 
 
 def _interpreter_ok(py: Path) -> bool:
-    """True if this executable is Python 3.10+ and can import pydantic (project baseline)."""
     if not py.is_file() or not os.access(py, os.X_OK):
         return False
     try:
@@ -55,7 +52,6 @@ def _interpreter_ok(py: Path) -> bool:
 
 
 def _try_reexec_with_suitable_python() -> None:
-    """Re-run with Python 3.10+ when the current interpreter is too old (e.g. Apple or 3.9 `.venv`)."""
     if os.environ.get("FC_SEARCHER_VENV_REEXEC") == "1":
         return
     if sys.version_info >= (3, 10):
@@ -74,9 +70,7 @@ def _try_reexec_with_suitable_python() -> None:
         if not cand.is_file():
             continue
         rc = cand.resolve()
-        if rc == here:
-            continue
-        if not _interpreter_ok(rc):
+        if rc == here or not _interpreter_ok(rc):
             continue
         os.environ["FC_SEARCHER_VENV_REEXEC"] = "1"
         os.execv(str(rc), [str(rc), str(script), *sys.argv[1:]])
@@ -85,11 +79,10 @@ def _try_reexec_with_suitable_python() -> None:
 def _die_py310_hint() -> None:
     print(
         "error: this project needs Python 3.10 or newer (your interpreter is older).\n"
-        "  Your `.venv` may have been created with Apple/Xcode Python 3.9.\n"
         "  Fix:\n"
         "    brew install python@3.12\n"
         "    ./scripts/recreate_venv_for_mcp.sh\n"
-        "    .venv/bin/python scripts/run_browser_search_once.py\n",
+        "    .venv/bin/python scripts/run_agentic_facebook_once_anthropic.py\n",
         file=sys.stderr,
     )
 
@@ -99,59 +92,46 @@ def main() -> int:
         _die_py310_hint()
         return 2
 
-    parser = argparse.ArgumentParser(description="Run browser search sync once (reads .env).")
-    parser.add_argument("--query", default=None, help="Override BROWSER_SEARCH_QUERY (global group discovery)")
-    parser.add_argument(
-        "--in-group-query",
-        default=None,
-        dest="in_group_query",
-        help="Override BROWSER_IN_GROUP_SEARCH_QUERY: comma-separated tokens; each phase uses '<query> <token>'.",
+    parser = argparse.ArgumentParser(
+        description="Run agentic Facebook sync once with Anthropic env (reads .env)."
     )
+    parser.add_argument("--query", default=None, help="Override BROWSER_SEARCH_QUERY")
+    parser.add_argument("--in-group-query", default=None, dest="in_group_query")
     parser.add_argument("--group-limit", type=int, default=None, metavar="N")
     parser.add_argument("--post-limit", type=int, default=None, metavar="N")
+    parser.add_argument("--seed-group-urls", default=None, help="Comma-separated group URLs/ids")
+    parser.add_argument("--global-message-contains", default=None, metavar="SUBSTRING")
     parser.add_argument(
-        "--seed-group-urls",
-        default=None,
-        help="Comma-separated URLs/ids; merged with BROWSER_SEED_GROUP_URLS from .env",
-    )
-    parser.add_argument(
-        "--global-message-contains",
-        default=None,
-        metavar="SUBSTRING",
-        help="Only keep posts whose message contains this text (case-insensitive). Optional.",
+        "--in-group-exact-keywords",
+        action="store_true",
+        help="In-group search uses only in-group tokens (no BROWSER_SEARCH_QUERY prefix).",
     )
     args = parser.parse_args()
 
     load_dotenv_file()
     try:
         from src.config import clear_settings_caches, get_settings  # noqa: E402
-        from src.services.pipeline import run_browser_search_sync  # noqa: E402
+        from src.db.session import init_db, init_engine  # noqa: E402
+        from src.services.agentic_facebook import run_agentic_facebook_sync  # noqa: E402
     except ModuleNotFoundError as exc:
         name = getattr(exc, "name", "") or ""
         if name in {"pydantic", "pydantic_settings"}:
             print(
-                "error: dependencies missing. Install with the **same** Python you use to run this script:\n"
+                "error: dependencies missing. Install with the same Python you use to run this script:\n"
                 f"    {Path(sys.executable)} -m pip install -r requirements-mcp.txt\n",
                 file=sys.stderr,
             )
             raise SystemExit(2) from exc
         raise
-    except TypeError as exc:
-        if "str | None" in str(exc) or "Unable to evaluate type annotation" in str(exc):
-            _die_py310_hint()
-            raise SystemExit(2) from exc
-        raise
 
     clear_settings_caches()
     settings = get_settings()
-    from src.db.session import init_db, init_engine  # noqa: E402
-
     init_engine(settings.database_url)
     init_db()
     gmc = args.global_message_contains
     if gmc is not None:
         gmc = str(gmc).strip() or None
-    out = run_browser_search_sync(
+    out = run_agentic_facebook_sync(
         settings,
         query=args.query,
         in_group_query=args.in_group_query,
@@ -159,6 +139,7 @@ def main() -> int:
         post_limit_per_group=args.post_limit,
         seed_group_urls=args.seed_group_urls,
         global_message_contains=gmc,
+        in_group_exact_keywords=bool(args.in_group_exact_keywords),
     )
     print(json.dumps(out, indent=2, default=str))
     return 0 if out.get("ok") else 1

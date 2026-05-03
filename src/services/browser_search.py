@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import logging
@@ -356,6 +357,89 @@ def post_matches_global_message_filter(message: str | None, needle: str | None) 
     return n.casefold() in (message or "").casefold()
 
 
+def build_body_keyword_needles(discovery_query: str, phrases: list[str]) -> list[str]:
+    """Stable union of in-group phrases plus discovery query (deduped case-insensitively)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in [*phrases, discovery_query]:
+        n = (item or "").strip()
+        if not n:
+            continue
+        key = n.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(n)
+    return out
+
+
+def post_matches_body_keyword_union(message: str | None, needles: Sequence[str]) -> bool:
+    """Keep post if ``message`` contains at least one needle (case-insensitive). Empty needles = no filter."""
+    cleaned = [n.strip() for n in needles if (n or "").strip()]
+    if not cleaned:
+        return True
+    m = (message or "").casefold()
+    return any(n.casefold() in m for n in cleaned)
+
+
+_EXPAND_GROUP_SEARCH_SEE_MORE_JS = textwrap.dedent(
+    """
+async (page) => {
+  const _sleep = async (ms) => {
+    const step = 200;
+    for (let t = 0; t < ms; t += step) {
+      try {
+        await page.evaluate(
+          (x) => new Promise((r) => globalThis.setTimeout(r, x)),
+          Math.min(step, ms - t)
+        );
+      } catch (e) {
+        await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => {});
+      }
+    }
+  };
+  let expanded_clicks = 0;
+  const labels = ['Ещё', 'See more'];
+  for (let round = 0; round < 8; round++) {
+    await page.mouse.wheel(0, (page.viewportSize()?.height) || 720);
+    await _sleep(450);
+    for (const txt of labels) {
+      try {
+        const loc = page.getByText(txt, { exact: true });
+        const n = await loc.count();
+        const cap = Math.min(n, 35);
+        for (let i = 0; i < cap; i++) {
+          try {
+            await loc.nth(i).click({ timeout: 1800 });
+            expanded_clicks++;
+            await _sleep(220);
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+  }
+  return JSON.stringify({ expanded_clicks });
+}
+"""
+).strip()
+
+
+def expand_facebook_group_search_see_more(runner: PlaywrightCliRunner) -> int:
+    """Scroll feed and click truncated-post controls (Russian ``Ещё`` / English ``See more``). Best-effort."""
+    out = runner.run_code(_EXPAND_GROUP_SEARCH_SEE_MORE_JS)
+    try:
+        parsed = _parse_playwright_cli_run_code_json_payload(out)
+        if isinstance(parsed, str):
+            inner = parsed.strip()
+            if inner.startswith("{"):
+                parsed = json.loads(inner)
+        if isinstance(parsed, dict):
+            return int(parsed.get("expanded_clicks") or 0)
+    except (BrowserAutomationError, json.JSONDecodeError, TypeError, ValueError):
+        logger.debug("Could not parse expand_see_more result", exc_info=True)
+    return 0
+
+
 _RU_MONTH_NAMES = (
     r"января|январь|февраля|февраль|марта|март|апреля|апрель|мая|май|июня|июнь|"
     r"июля|июль|августа|август|сентября|сентябрь|октября|октябрь|ноября|ноябрь|декабря|декабрь"
@@ -608,6 +692,7 @@ def build_in_group_phrases_for_settings(
     *,
     in_group_query: str | None,
     settings_in_group: str,
+    exact_keywords: bool = False,
 ) -> list[str]:
     """Build in-group ``/groups/…/search/?q=`` phrases from env or CLI.
 
@@ -615,8 +700,13 @@ def build_in_group_phrases_for_settings(
     commas, each token is prefixed with ``search_query`` (``BROWSER_SEARCH_QUERY``), e.g.
     ``ищу работу`` + ``малярные работы`` → ``ищу работу малярные работы``.
 
+    When ``exact_keywords`` is true, tokens are used **as the in-group search query only** (no
+    ``search_query`` prefix), e.g. ``Бетонщик``, ``Арматурщик``. Discovery still uses the first
+    segment of ``BROWSER_SEARCH_QUERY`` separately.
+
     When empty, returns ``[search_query]``. A single token equal to ``search_query`` (casefold)
-    returns ``[search_query]`` once. A single other token is prefixed.
+    returns ``[search_query]`` once (unless ``exact_keywords``, then returns that token). A single
+    other token is prefixed when not ``exact_keywords``.
     """
     raw = (in_group_query or settings_in_group or "").strip()
     sq = search_query.strip() or "job"
@@ -625,6 +715,8 @@ def build_in_group_phrases_for_settings(
     parts = _split_in_group_query_tokens(raw)
     if not parts:
         return [sq]
+    if exact_keywords:
+        return parts
     if len(parts) == 1:
         one = parts[0]
         if one.casefold() == sq.casefold():
@@ -677,6 +769,11 @@ def run_browser_group_search(
     seed_groups: list[DiscoveredGroup] | None = None,
     runner_factory: type[PlaywrightCliRunner] = PlaywrightCliRunner,
     global_message_contains: str | None = None,
+    output_base_dir: Path | None = None,
+    in_group_exact_keywords: bool = False,
+    facebook_ui_year_filter: bool = False,
+    expand_see_more_before_extract: bool = False,
+    body_keyword_union: bool = False,
 ) -> dict[str, Any]:
     raw_search = (query or settings.browser_search_query or "job").strip() or "job"
     discovery_query = primary_browser_search_phrase(raw_search)
@@ -687,12 +784,14 @@ def run_browser_group_search(
                 discovery_query,
                 in_group_query=in_group_query,
                 settings_in_group=settings.browser_in_group_search_query,
+                exact_keywords=in_group_exact_keywords,
             )
     else:
         phrases = build_in_group_phrases_for_settings(
             discovery_query,
             in_group_query=in_group_query,
             settings_in_group=settings.browser_in_group_search_query,
+            exact_keywords=in_group_exact_keywords,
         )
     in_group_summary = (
         phrases[0]
@@ -702,7 +801,7 @@ def run_browser_group_search(
     safe_group_limit = _coerce_limit(group_limit, settings.browser_group_scan_limit)
     safe_post_limit = _coerce_limit(post_limit_per_group, settings.browser_post_limit_per_group)
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    output_dir = Path("output") / "playwright" / timestamp
+    output_dir = (output_base_dir or (Path("output") / "playwright")) / timestamp
     runner = runner_factory(
         headed=not settings.browser_headless,
         timeout_seconds=settings.browser_search_timeout_seconds,
@@ -711,9 +810,25 @@ def run_browser_group_search(
     gmc = (global_message_contains or "").strip() or None
     year_f = settings.browser_post_publication_year
     cutoff = browser_publication_cutoff_date(settings)
+    filters_token: str | None = None
+    if facebook_ui_year_filter:
+        if year_f is None:
+            raise BrowserAutomationError(
+                "facebook_ui_year_filter requires BROWSER_POST_PUBLICATION_YEAR "
+                "(set an integer year or 'auto' in .env)"
+            )
+        filters_token = encode_facebook_group_search_creation_year_filter(int(year_f))
+        logger.info(
+            "Facebook in-group search URL will include UI creation-year filter: year=%s",
+            year_f,
+        )
+    body_needles: list[str] = []
+    if body_keyword_union:
+        body_needles = build_body_keyword_needles(discovery_query, phrases)
     logger.info(
         "Starting browser search sync discover_query=%s (raw=%r) in_group_queries=%s group_limit=%s post_limit=%s "
-        "global_message_contains=%s publication_year_filter=%s publication_from_date=%s",
+        "global_message_contains=%s publication_year_filter=%s publication_from_date=%s facebook_ui_filters=%s "
+        "expand_see_more=%s body_keyword_union=%s body_keyword_needles=%s",
         discovery_query,
         raw_search,
         phrases,
@@ -722,6 +837,10 @@ def run_browser_group_search(
         gmc,
         year_f,
         cutoff.isoformat() if cutoff else None,
+        bool(filters_token),
+        expand_see_more_before_extract,
+        body_keyword_union,
+        len(body_needles),
     )
     try:
         ensure_logged_in(runner, settings=settings)
@@ -755,7 +874,14 @@ def run_browser_group_search(
                 gkey = group.group_url.rstrip("/").lower()
                 bucket = results_by_url[gkey]
                 try:
-                    posts = extract_group_job_posts(group, phrase, safe_post_limit, runner)
+                    posts = extract_group_job_posts(
+                        group,
+                        phrase,
+                        safe_post_limit,
+                        runner,
+                        filters=filters_token,
+                        expand_see_more=expand_see_more_before_extract,
+                    )
                     logger.info(
                         "Browser search group=%s phrase=%r raw_hits=%s",
                         group.group_url,
@@ -768,6 +894,11 @@ def run_browser_group_search(
                         if not pid:
                             continue
                         if not post_matches_global_message_filter(nd.get("message"), gmc):
+                            continue
+                        if body_keyword_union and not post_matches_body_keyword_union(
+                            nd.get("message"), body_needles
+                        ):
+                            logger.debug("Skipping post %s: body_keyword_union mismatch", pid)
                             continue
                         if not post_publication_matches_settings_filter(nd, settings):
                             logger.debug(
@@ -818,12 +949,22 @@ def run_browser_group_search(
         }
         if gmc:
             out["global_message_contains"] = gmc
+        if in_group_exact_keywords:
+            out["in_group_exact_keywords"] = True
+        if filters_token:
+            out["facebook_ui_year_filter"] = True
+            out["facebook_ui_filter_year"] = int(year_f) if year_f is not None else None
         if year_f is not None:
             out["publication_year_filter"] = year_f
         if cutoff is not None:
             out["publication_from_date"] = cutoff.isoformat()
         if raw_search != discovery_query:
             out["search_query_raw"] = raw_search
+        if expand_see_more_before_extract:
+            out["expand_see_more"] = True
+        if body_keyword_union:
+            out["body_keyword_union"] = True
+            out["body_keyword_needles_count"] = len(body_needles)
         return out
     finally:
         runner.close()
@@ -990,8 +1131,19 @@ def extract_group_job_posts(
     keyword: str,
     limit: int,
     runner: PlaywrightCliRunner,
+    *,
+    filters: str | None = None,
+    expand_see_more: bool = False,
 ) -> list[BrowserFoundPost]:
-    runner.open(build_group_search_url(group.group_url, keyword))
+    runner.open(build_group_search_url(group.group_url, keyword, filters=filters))
+    if expand_see_more:
+        clicks = expand_facebook_group_search_see_more(runner)
+        logger.info(
+            "expand_see_more group=%s phrase=%r see_more_clicks=%s",
+            group.group_url,
+            keyword,
+            clicks,
+        )
     runner.snapshot(f"group-search-{_slugify(group.group_name)}")
     payload = runner.run_json(
         """
@@ -1075,8 +1227,37 @@ def normalize_browser_post(found: BrowserFoundPost, *, query: str) -> dict[str, 
     }
 
 
-def build_group_search_url(group_url: str, keyword: str) -> str:
-    return f"{group_url.rstrip('/')}/search/?q={quote(keyword)}"
+def encode_facebook_group_search_creation_year_filter(year: int) -> str:
+    """Return the ``filters`` query value (Facebook web UI: posts created in calendar ``year``).
+
+    Matches the base64 payload Facebook adds for “creation time” filtered to Jan 1–Dec 31 of ``year``.
+    """
+    inner_args = {
+        "start_year": str(year),
+        "start_month": f"{year}-1",
+        "end_year": str(year),
+        "end_month": f"{year}-12",
+        "start_day": f"{year}-1-1",
+        "end_day": f"{year}-12-31",
+    }
+    inner_json = json.dumps(inner_args, separators=(",", ":"))
+    middle = json.dumps({"name": "creation_time", "args": inner_json}, separators=(",", ":"))
+    outer = {"rp_creation_time:0": middle}
+    outer_json = json.dumps(outer, separators=(",", ":"))
+    return base64.urlsafe_b64encode(outer_json.encode()).decode().rstrip("=")
+
+
+def build_group_search_url(
+    group_url: str,
+    keyword: str,
+    *,
+    filters: str | None = None,
+) -> str:
+    """Group in-search URL. Optional ``filters`` is the raw Facebook UI filter token (base64)."""
+    base = f"{group_url.rstrip('/')}/search/?q={quote(keyword)}"
+    if not filters:
+        return base
+    return f"{base}&filters={quote(filters, safe='')}"
 
 
 def extract_group_id(group_url: str) -> str | None:

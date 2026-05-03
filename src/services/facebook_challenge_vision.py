@@ -15,6 +15,7 @@ from typing import Any, Callable, Protocol
 from anthropic import Anthropic
 
 from src.config import Settings
+from src.config_anthropic import get_anthropic_settings
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +117,11 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
-def _vision_plan_challenge(screenshot_path: Path, settings: Settings) -> dict[str, Any]:
-    if not settings.anthropic_api_key:
+def _vision_plan_challenge(screenshot_path: Path) -> dict[str, Any]:
+    ai = get_anthropic_settings()
+    if not ai.anthropic_api_key:
         return {"right_arrow_clicks": 0, "submit": False}
-    client = Anthropic(api_key=settings.anthropic_api_key)
+    client = Anthropic(api_key=ai.anthropic_api_key)
     b64 = base64.standard_b64encode(screenshot_path.read_bytes()).decode("ascii")
     prompt = """You are helping resolve a Meta/Facebook browser security puzzle shown in the screenshot.
 
@@ -144,7 +146,7 @@ If this screenshot is not that puzzle, return {"right_arrow_clicks": 0, "submit"
         {"type": "text", "text": prompt},
     ]
     response = client.messages.create(
-        model=settings.claude_model,
+        model=ai.claude_model,
         max_tokens=256,
         messages=[{"role": "user", "content": content}],
     )
@@ -170,7 +172,7 @@ def maybe_resolve_meta_visual_challenge(
     """If a Meta visual challenge is visible and env allows, screenshot → vision → ArrowRight × N → optional Submit."""
     if not settings.enable_browser_meta_challenge_vision:
         return
-    if not settings.anthropic_api_key:
+    if not get_anthropic_settings().anthropic_api_key:
         logger.debug("Meta challenge vision skipped: no ANTHROPIC_API_KEY")
         return
 
@@ -185,7 +187,7 @@ def maybe_resolve_meta_visual_challenge(
             logger.warning("Challenge screenshot failed: %s", exc)
             return
         try:
-            plan = _vision_plan_challenge(shot, settings)
+            plan = _vision_plan_challenge(shot)
         except Exception as exc:
             logger.warning("Vision plan for Meta challenge failed: %s", exc)
             return
