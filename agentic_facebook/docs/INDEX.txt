@@ -1,0 +1,28 @@
+Agentic Facebook orchestrator — doc manifest (fc_searcher)
+
+README_ORCHESTRATOR.md
+  Master navigation by role; links to CLI reference and legacy prompts.
+
+OPTIMIZATION_SUMMARY.md
+  Why the docs were split; metrics; persona reading order.
+
+AGENTIC_ORCHESTRATOR_OPTIMIZED.md
+  Script matrix, decision tree, agent phases, examples (start here for behavior).
+
+AGENTIC_DECISION_TREES.md
+  Quick selection flow, checklists, troubleshooting, parameter cheat sheet.
+
+AGENTIC_DEPLOYMENT_RUNBOOK.md
+  Env vars (accurate names), optional bash wrappers, monitoring, cron hints.
+
+QUICK_REFERENCE_CARD.txt
+  Printable 5-second script choice + one-liners.
+
+DELIVERY_MANIFEST.md
+  What shipped in this documentation bundle.
+
+Also in repo:
+  docs/FC_COMMAND.md           — CLI commands and flags
+  agentic_facebook/README.md   — minimal enable + run (repo root relative)
+  agentic_facebook/PIPELINES.md — flow references
+  scripts/agentic_preflight.sh   — optional local checks

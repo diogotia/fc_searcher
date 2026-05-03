@@ -2,6 +2,17 @@
 
 This directory is a separate usage kit for the opt-in agentic Facebook flow. It does not replace the existing `facebook_browser_search_sync` MCP tool, `/admin/browser-search-sync`, or `scripts/run_browser_search_once.py`.
 
+## Orchestrator documentation (full suite)
+
+For script selection, deployment, decision trees, and troubleshooting:
+
+- **[docs/README_ORCHESTRATOR.md](docs/README_ORCHESTRATOR.md)** — start here for navigation by role.
+- **[docs/INDEX.txt](docs/INDEX.txt)** — manifest of all orchestrator files.
+- **[docs/QUICK_REFERENCE_CARD.txt](docs/QUICK_REFERENCE_CARD.txt)** — printable one-page script choice.
+- **[docs/FC_COMMAND.md](../docs/FC_COMMAND.md)** — CLI flags and commands (repo-wide).
+
+Optional check before runs: **`./scripts/agentic_preflight.sh`** from the repository root.
+
 ## Enable
 
 Set these in `.env`:
@@ -57,6 +68,7 @@ Artifacts are written under `output/agentic_facebook/<timestamp>`, and HTML summ
 
 ## Files
 
+- `docs/` — modular orchestrator suite (matrices, runbooks, quick reference).
 - `MASTER_ORCHESTRATOR_PROMPT.md`: copyable master prompt for Cursor or Claude.
 - `PIPELINES.md`: prebuilt flow references for sync, search, report, and debug.
 - `PLAYWRIGHT_ACTION_PLAN.md`: browser primitive sequence and checkpoint rules.
