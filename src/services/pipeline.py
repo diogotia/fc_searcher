@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.logging_config import get_logger
 import shutil
 import tempfile
 from collections.abc import Sequence
@@ -39,7 +39,7 @@ from src.services.facebook_client import USER_FEED_GROUP_ID, FacebookClient
 if TYPE_CHECKING:
     from flask import Flask
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _permalink_from_post_dict(p: dict[str, Any]) -> str | None:

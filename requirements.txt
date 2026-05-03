@@ -10,6 +10,7 @@ python-dotenv>=1.0.0,<2
 python-dateutil>=2.8.2,<3
 psycopg[binary]>=3.1.18,<4
 prometheus-client>=0.20.0,<1
+structlog>=24.1.0,<25
 
 # dev / ci
 ruff>=0.4.0,<1

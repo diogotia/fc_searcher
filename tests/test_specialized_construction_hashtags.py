@@ -22,5 +22,6 @@ def test_tag_to_in_group_search_strips_hash_and_underscores():
 def test_construction_tag_list_has_expected_entries():
     tags = tag_strings()
     assert "#строитель" in tags
-    assert "#ремонт_квартир" in tags
-    assert len(SPECIALIZED_CONSTRUCTION_TAGS) == 7
+    assert "#плотник" in tags
+    assert "#столяр" in tags
+    assert len(SPECIALIZED_CONSTRUCTION_TAGS) == 4

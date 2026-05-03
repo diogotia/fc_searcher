@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -9,9 +8,10 @@ from typing import Any
 import requests
 
 from src.config import Settings
+from src.logging_config import get_logger
 from src.services.rate_limit import request_with_graph_backoff
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Stored in DB `posts.group_id` when syncing `GET /me/feed` (not a Facebook group id).
 USER_FEED_GROUP_ID = "user"

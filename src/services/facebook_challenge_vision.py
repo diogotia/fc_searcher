@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
+from src.logging_config import get_logger
 import time
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -17,7 +17,7 @@ from anthropic import Anthropic
 from src.config import Settings
 from src.config_anthropic import get_anthropic_settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _MAX_RIGHT_CLICKS = 24
 _VISION_ROUNDS = 8

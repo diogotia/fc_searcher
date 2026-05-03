@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from src.config import clear_settings_caches, get_settings
+from src.logging_config import configure_logging
 from src.db.session import init_db, init_engine
 from src.services.agentic_facebook import run_agentic_facebook_sync
 from src.services.facebook_client import FacebookClient
@@ -25,6 +26,11 @@ def main() -> None:
     _repo = Path(__file__).resolve().parent.parent
     os.environ.setdefault("FC_SEARCHER_REPO_ROOT", str(_repo))
     clear_settings_caches()
+    _settings = get_settings()
+    configure_logging(
+        level=_settings.log_level,
+        use_json=os.environ.get("LOG_JSON", "").lower() in {"1", "true", "yes"},
+    )
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover

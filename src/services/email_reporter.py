@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-import logging
+from src.logging_config import get_logger
 import smtplib
 from email import encoders
 from email.mime.base import MIMEBase
@@ -13,7 +13,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from src.config import Settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EmailReporter:

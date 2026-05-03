@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.logging_config import get_logger
 import secrets
 from collections.abc import Callable
 from typing import Any
@@ -19,7 +19,7 @@ from src.services.pipeline import (
 )
 from src.services.post_search import search_stored_posts
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 

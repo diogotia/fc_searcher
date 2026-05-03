@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.logging_config import get_logger
 import os
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.db.db_models import Base
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None

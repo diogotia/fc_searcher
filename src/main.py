@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import atexit
-import logging
 import os
 import sys
 from pathlib import Path
@@ -15,6 +14,7 @@ from src.api.routes_public_search import bp as public_search_bp
 from src.config import clear_settings_caches, get_settings
 from src.db.session import init_db, init_engine
 from src.jobs.scheduler import start_scheduler
+from src.logging_config import configure_logging, get_logger
 from src.webhooks.facebook_webhook import bp as fb_webhook_bp
 
 
@@ -28,9 +28,12 @@ def create_app() -> Flask:
 
     clear_settings_caches()
     settings = get_settings()
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    use_json = os.environ.get("LOG_JSON", "").lower() in {"1", "true", "yes"}
+    configure_logging(level=settings.log_level, use_json=use_json)
+    get_logger(__name__).info(
+        "Application initialized",
+        log_level=settings.log_level,
+        log_json=use_json,
     )
 
     init_engine(settings.database_url)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
+from src.logging_config import get_logger
 import re
 from typing import Any
 
@@ -9,7 +9,7 @@ from anthropic import Anthropic
 
 from src.config_anthropic import get_anthropic_settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:

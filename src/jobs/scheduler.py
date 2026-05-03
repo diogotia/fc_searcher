@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.logging_config import get_logger
 from typing import TYPE_CHECKING
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -13,7 +13,7 @@ from src.services.pipeline import run_daily_report, run_sync
 if TYPE_CHECKING:
     from flask import Flask
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _cron_trigger(expr: str, tz_name: str) -> CronTrigger:

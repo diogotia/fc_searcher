@@ -2,16 +2,38 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, current_app, jsonify
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from sqlalchemy import text
 
 from src.config import Settings, get_settings, reload_settings_if_dotenv_mounted
 from src.config_anthropic import get_anthropic_settings
+from src.db.session import get_session
+from src.logging_config import get_logger
 
 bp = Blueprint("health", __name__)
+logger = get_logger(__name__)
 
 
 def _settings() -> Settings:
     reload_settings_if_dotenv_mounted()
     return get_settings()
+
+
+@bp.get("/health/alive")
+def alive() -> tuple[Response, int]:
+    """Liveness: process is up (no dependency checks)."""
+    return jsonify({"status": "alive"}), 200
+
+
+@bp.get("/health/ready")
+def ready() -> tuple[Response, int]:
+    """Readiness: database session can execute a trivial query."""
+    try:
+        with get_session() as session:
+            session.execute(text("SELECT 1"))
+        return jsonify({"ready": True}), 200
+    except Exception as exc:
+        logger.error("readiness_check_failed", error=str(exc))
+        return jsonify({"ready": False, "error": str(exc)}), 503
 
 
 @bp.get("/health")

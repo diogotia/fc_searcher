@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import logging
+from src.logging_config import get_logger
 import os
 import re
 from collections import defaultdict
@@ -21,7 +21,7 @@ from dateutil import parser as date_parser
 
 from src.config import Settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _GROUP_URL_RE = re.compile(r"https?://(?:www\.)?facebook\.com/groups/([^/?#]+)")
 _POST_ID_PATTERNS = (

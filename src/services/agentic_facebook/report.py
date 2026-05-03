@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import html
 import json
-import logging
+from src.logging_config import get_logger
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from src.db.session import _repo_base_dir
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _utc_folder_stamp() -> str:

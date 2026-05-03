@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
+from src.logging_config import get_logger
 from typing import Any
 
 from flask import Blueprint, abort, request
@@ -14,7 +14,7 @@ from src.db.session import get_session
 from src.services.pipeline import upsert_posts
 from src.webhooks.verify import constant_time_equals, verify_meta_signature
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 bp = Blueprint("facebook_webhook", __name__)
 
