@@ -31,7 +31,7 @@ if v not in ("1", "true", "yes"):
 print("  ✓ ENABLE_AGENTIC_FACEBOOK_SYNC")
 PY
 
-for s in scripts/run_agentic_facebook_once.py scripts/run_agentic_facebook_exact_posts.py scripts/run_agentic_facebook_once_exact_year.py; do
+for s in scripts/run_agentic/run_agentic_facebook_once.py scripts/run_agentic/run_agentic_facebook_exact_posts.py scripts/run_agentic/run_agentic_facebook_once_exact_year.py; do
   [[ -f "$s" ]] || { echo "  ✗ Missing $s"; ok=1; }
 done
 [[ "$ok" -eq 0 ]] || exit 1

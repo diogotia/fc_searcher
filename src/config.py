@@ -67,6 +67,19 @@ class Settings(BaseSettings):
         description="Comma-separated tokens: each becomes /groups/{id}/search/?q= with BROWSER_SEARCH_QUERY prefixed. "
         "Single token not equal to BROWSER_SEARCH_QUERY is prefixed. Empty = use BROWSER_SEARCH_QUERY only.",
     )
+    browser_in_group_search_in_post: str = Field(
+        default="",
+        validation_alias=AliasChoices("BROWSER_IN_GROUP_SEARCH_IN_POST", "browser_in_group_search_in_post"),
+        description="Comma-separated trade-role keywords. When non-empty, exact-posts agentic body OR-filter "
+        "keeps a post only if its message contains at least one of these (case-insensitive substring). "
+        "Mandatory AND phrase still comes from --global-message-contains / BROWSER_GLOBAL_MESSAGE_CONTAINS.",
+    )
+    browser_global_message_contains: str = Field(
+        default="",
+        validation_alias=AliasChoices("BROWSER_GLOBAL_MESSAGE_CONTAINS", "browser_global_message_contains"),
+        description="When non-empty, exact-posts agentic body AND-filter: post message must contain this substring "
+        "(case-insensitive). CLI --global-message-contains overrides when passed.",
+    )
     browser_group_scan_limit: int = Field(
         default=20,
         validation_alias="BROWSER_GROUP_SCAN_LIMIT",
@@ -185,6 +198,8 @@ class Settings(BaseSettings):
         "monitor_keywords",
         "browser_search_query",
         "browser_in_group_search_query",
+        "browser_in_group_search_in_post",
+        "browser_global_message_contains",
         "browser_seed_group_urls",
         "agentic_facebook_output_dir",
         "agentic_facebook_source",

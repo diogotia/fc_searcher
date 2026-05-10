@@ -52,9 +52,17 @@ def main() -> int:
         action="store_true",
         help="only email latest browser HTML (skip daily DB report)",
     )
+    p.add_argument(
+        "--browser-html-dir",
+        default=None,
+        metavar="PATH",
+        help="with default mode: attach this report folder's index.html (basename under report/ or absolute), "
+        "instead of newest report/search_*",
+    )
     args = p.parse_args()
 
     from src.config import clear_settings_caches, get_settings  # noqa: E402
+    from src.db.session import init_db, init_engine  # noqa: E402
     from src.services.pipeline import (  # noqa: E402
         find_latest_browser_search_report_dir,
         run_daily_report_with_latest_browser_html_email,
@@ -63,6 +71,8 @@ def main() -> int:
 
     clear_settings_caches()
     settings = get_settings()
+    init_engine(settings.database_url)
+    init_db()
 
     if args.print_only:
         try:
@@ -80,7 +90,11 @@ def main() -> int:
             return 1
         out = send_browser_search_html_report_email(settings, report_dir=folder)
     else:
-        out = run_daily_report_with_latest_browser_html_email(settings)
+        opt = str(args.browser_html_dir).strip() if args.browser_html_dir else None
+        out = run_daily_report_with_latest_browser_html_email(
+            settings,
+            browser_html_report_dir=opt or None,
+        )
 
     print(json.dumps(out, indent=2, ensure_ascii=False))
     return 0 if out.get("ok") else 1

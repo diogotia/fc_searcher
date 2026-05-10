@@ -130,6 +130,8 @@ Replace the mock path with a real token when Meta finishes app verification and 
 cd fc_searcher
 cp .env.example .env
 # Edit .env — set FACEBOOK_ACCESS_TOKEN, ADMIN_TOKEN, and either FACEBOOK_GROUP_IDS (default) or FACEBOOK_SYNC_MODE=me
+# Layout: [.env.example](.env.example) uses the same grouped sections as a typical `.env` (Agentic Facebook, Graph API,
+# Facebook web login, Playwright `BROWSER_*`, publication filters, Anthropic, SMTP, database, app, admin, …).
 
 docker compose up --build -d
 curl -s http://localhost:5000/health | jq .
@@ -192,7 +194,7 @@ Set these env vars to enable it:
 - `BROWSER_GROUP_SCAN_LIMIT=20` (max **100**; caps **Facebook `/search/groups`** picks only — **every** `BROWSER_SEED_GROUP_URLS` entry is still scanned, then up to this many extra groups from search)
 - `BROWSER_POST_LIMIT_PER_GROUP=25`
 - `BROWSER_HEADLESS=false`
-- `BROWSER_SEARCH_TIMEOUT_SECONDS=45`
+- `BROWSER_SEARCH_TIMEOUT_SECONDS=180` — raise if login/2FA needs longer idle time (see [.env.example](.env.example))
 - Optional: `BROWSER_SEED_GROUP_URLS` — comma-separated `https://www.facebook.com/groups/NUMERIC_ID/...` URLs or numeric ids; each is opened **before** results from Facebook group search (so you can always include a known group).
 
 #### Maximizing distinct groups (and reading the daily CSV)

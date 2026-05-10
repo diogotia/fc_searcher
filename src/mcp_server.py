@@ -119,12 +119,17 @@ def main() -> None:
         global_message_contains: str | None = None,
         in_group_exact_keywords: bool = False,
         facebook_ui_year_filter: bool = False,
+        expand_see_more_before_extract: bool = False,
+        body_keyword_union: bool = False,
     ) -> str:
         """Opt-in agentic Facebook flow, isolated from `facebook_browser_search_sync`.
 
         Requires `ENABLE_AGENTIC_FACEBOOK_SYNC=true`. Reuses the browser search primitives but writes
         rows with source `playwright_agentic` by default and stores artifacts under
         `AGENTIC_FACEBOOK_OUTPUT_DIR` (`output/agentic_facebook` by default).
+
+        Set **expand_see_more_before_extract** and **body_keyword_union** to mirror
+        ``scripts/run_agentic/run_agentic_facebook_exact_posts.py`` (Ещё / See more + body OR filter).
         """
         return str(
             run_agentic_facebook_sync(
@@ -138,6 +143,8 @@ def main() -> None:
                 global_message_contains=global_message_contains,
                 in_group_exact_keywords=in_group_exact_keywords,
                 facebook_ui_year_filter=facebook_ui_year_filter,
+                expand_see_more_before_extract=expand_see_more_before_extract,
+                body_keyword_union=body_keyword_union,
             )
         )
 

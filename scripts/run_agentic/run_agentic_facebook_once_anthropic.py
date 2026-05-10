@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Run agentic Facebook sync once with Anthropic env available (duplicate of ``run_agentic_facebook_once.py``).
 
-Same CLI and behavior as ``run_agentic_facebook_once.py``, but **does not** strip
+Same CLI and behavior as ``scripts/run_agentic/run_agentic_facebook_once.py``, but **does not** strip
 ``ANTHROPIC_API_KEY`` / ``CLAUDE_MODEL``. Optional Meta login challenge vision
 (``ENABLE_BROWSER_META_CHALLENGE_VISION``) can use Claude when configured.
 
 Usage::
 
-    .venv/bin/python scripts/run_agentic_facebook_once_anthropic.py
+    .venv/bin/python scripts/run_agentic/run_agentic_facebook_once_anthropic.py
 
-For runs that must not touch Anthropic at all, use ``run_agentic_facebook_once.py``.
+For runs that must not touch Anthropic at all, use ``scripts/run_agentic/run_agentic_facebook_once.py``.
 """
 
 from __future__ import annotations
@@ -21,11 +21,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parent
-_REPO = _SCRIPTS.parent
+_RUN_AGENTIC_DIR = Path(__file__).resolve().parent
+_SCRIPTS_ROOT = _RUN_AGENTIC_DIR.parent
+_REPO = _SCRIPTS_ROOT.parent
 os.environ.setdefault("FC_SEARCHER_REPO_ROOT", str(_REPO))
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+if str(_SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_ROOT))
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
@@ -82,7 +83,7 @@ def _die_py310_hint() -> None:
         "  Fix:\n"
         "    brew install python@3.12\n"
         "    ./scripts/recreate_venv_for_mcp.sh\n"
-        "    .venv/bin/python scripts/run_agentic_facebook_once_anthropic.py\n",
+        "    .venv/bin/python scripts/run_agentic/run_agentic_facebook_once_anthropic.py\n",
         file=sys.stderr,
     )
 

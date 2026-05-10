@@ -103,7 +103,7 @@ def test_admin_report_browser_html_ok(client, monkeypatch):
 
 
 def test_admin_report_browser_html_last_merges_daily_shape(client, monkeypatch):
-    def _fake_combined(_settings):
+    def _fake_combined(_settings, **kwargs):
         return {
             "ok": True,
             "date": "2026-04-29",
@@ -139,6 +139,26 @@ def test_admin_report_browser_html_last_merges_daily_shape(client, monkeypatch):
     assert body["csv"].endswith(".csv")
     assert body["html_report_dir"] == "/app/report/search_latest"
     assert body["browser_html_email_sent"] is True
+
+
+def test_admin_report_browser_html_last_passes_html_report_dir(client, monkeypatch):
+    captured: dict = {}
+
+    def _fake_combined(_settings, **kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "rows": 0, "csv": "/x.csv", "run_stamp": "z"}
+
+    monkeypatch.setattr(
+        "src.api.routes_admin.run_daily_report_with_latest_browser_html_email",
+        _fake_combined,
+    )
+    resp = client.post(
+        "/admin/report-browser-html-last",
+        headers={"X-Admin-Token": "test-admin-token"},
+        json={"html_report_dir": "agentic_search_20260509T065719Z"},
+    )
+    assert resp.status_code == 200
+    assert captured.get("browser_html_report_dir") == "agentic_search_20260509T065719Z"
 
 
 def test_admin_browser_search_sync_requires_token(client):

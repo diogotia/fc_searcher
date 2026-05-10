@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from pathlib import Path
+
+import pytest
 
 from src.config import Settings
 from src.services.browser_search import (
@@ -11,15 +14,21 @@ from src.services.browser_search import (
     build_in_group_phrases_for_settings,
     infer_publication_date_from_browser_post,
     infer_publication_year_from_browser_post,
+    match_in_post_keyword_canonical,
+    normalize_for_in_post_match,
+    parse_in_post_keywords,
     post_matches_body_keyword_union,
     post_matches_global_message_filter,
     post_publication_matches_settings_filter,
     post_publication_year_matches_filter,
     _parse_playwright_cli_run_code_json_payload,
     build_group_search_url,
+    _build_group_search_extract_run_code,
+    _build_group_search_scroll_extract_run_code,
     build_post_id,
     derive_group_key,
     extract_group_id,
+    extract_group_job_posts,
     extract_post_external_id,
     merge_discovered_group_lists,
     normalize_browser_post,
@@ -275,6 +284,50 @@ def test_post_matches_body_keyword_union():
     assert post_matches_body_keyword_union("x", []) is True
 
 
+def test_parse_in_post_keywords_splits_csv_and_newlines():
+    raw = "Каменщик, Бетонщик ,\n  Монтажник металлоконструкций\nКровельщик,"
+    assert parse_in_post_keywords(raw) == [
+        "Каменщик",
+        "Бетонщик",
+        "Монтажник металлоконструкций",
+        "Кровельщик",
+    ]
+    assert parse_in_post_keywords(None) == []
+    assert parse_in_post_keywords("") == []
+    assert parse_in_post_keywords("   ") == []
+
+
+def test_normalize_for_in_post_match_unicode_and_case():
+    assert normalize_for_in_post_match("  КАМЕНЩИК  ") == "каменщик"
+    hay = normalize_for_in_post_match("ищу КАМЕНЩИКА в Кёльне")
+    assert normalize_for_in_post_match("Каменщик") in hay
+
+
+def test_match_in_post_keyword_canonical_casefold_and_synonyms():
+    needles = ["Каменщик", "Гипсокартонщик", "штукатурка", "Гипсакартон"]
+    canon, variant = match_in_post_keyword_canonical("Вакансия КАМЕНЩИК срочно", needles)
+    assert canon == "Каменщик"
+    assert variant == "Каменщик"
+
+    canon2, var2 = match_in_post_keyword_canonical("нужен гипсокартон на объект", needles)
+    assert canon2 == "Гипсокартонщик"
+    assert var2 == "гипсокартон"
+
+    canon3, var3 = match_in_post_keyword_canonical("отделка штукатуром", needles)
+    assert canon3 == "штукатурка"
+    assert var3 == "штукатур"
+
+    canon4, var4 = match_in_post_keyword_canonical("монтаж гипсокартон потолок", needles)
+    assert canon4 == "Гипсокартонщик"
+    assert var4 == "гипсокартон"
+
+    canon5, var5 = match_in_post_keyword_canonical("объявление Гипсакартон стены", needles)
+    assert canon5 == "Гипсакартон"
+    assert var5 == "Гипсакартон"
+
+    assert match_in_post_keyword_canonical("совсем другой текст", needles) == (None, None)
+
+
 def test_merge_discovered_group_lists_dedupes_and_prioritizes():
     a = DiscoveredGroup(group_name="A", group_url="https://www.facebook.com/groups/1", group_id="1")
     b = DiscoveredGroup(group_name="B", group_url="https://www.facebook.com/groups/2", group_id="2")
@@ -299,3 +352,98 @@ def test_merge_discovered_group_lists_keeps_all_seeds_caps_discovery_only():
     ]
     merged = merge_discovered_group_lists(seeds, discovered, discovery_limit=2)
     assert [g.group_id for g in merged] == ["101", "102", "103", "201", "202"]
+
+
+class _FakeExtractRunner:
+    """Minimal PlaywrightCliRunner stand-in for extract_group_job_posts."""
+
+    def __init__(self, extract_stdout_json: str | list[str]) -> None:
+        self._queue: list[str] = (
+            [extract_stdout_json] if isinstance(extract_stdout_json, str) else list(extract_stdout_json)
+        )
+        self.snapshot_calls = 0
+
+    def open(self, url: str) -> None:
+        return None
+
+    def snapshot(self, label: str) -> Path:
+        self.snapshot_calls += 1
+        return Path("/tmp/fc-searcher-test-snapshot.txt")
+
+    def run_code(self, code: str) -> str:
+        if not self._queue:
+            return "{}"
+        return self._queue.pop(0)
+
+
+def test_build_group_search_extract_run_code_substitutes_scroll_params():
+    code = _build_group_search_extract_run_code(scroll_rounds=4, scroll_pause_ms=900)
+    assert "__SCROLL_ROUNDS__" not in code
+    assert "__SCROLL_PAUSE_MS__" not in code
+    assert "for (let _fcI = 0; _fcI < 4; _fcI += 1)" in code
+    assert "await _fcSleep(900);" in code
+
+
+def test_build_group_search_scroll_extract_run_code_substitutes_scroll_params():
+    code = _build_group_search_scroll_extract_run_code(scroll_rounds=4, scroll_pause_ms=900)
+    assert "__SCROLL_ROUNDS__" not in code
+    assert "__SCROLL_PAUSE_MS__" not in code
+    assert "for (let _fcI = 0; _fcI < 4; _fcI += 1)" in code
+
+
+def test_extract_group_job_posts_empty_search_payload_returns_no_posts():
+    import json
+
+    group = DiscoveredGroup(
+        group_name="Test Group",
+        group_url="https://www.facebook.com/groups/12345",
+        group_id="12345",
+    )
+    probe = {"inaccessible": False, "empty_search": True}
+    runner = _FakeExtractRunner(json.dumps(probe))
+    posts = extract_group_job_posts(group, "keyword", 10, runner)
+    assert posts == []
+    assert runner.snapshot_calls == 0
+
+
+def test_extract_group_job_posts_with_post_rows():
+    import json
+
+    group = DiscoveredGroup(
+        group_name="Jobs",
+        group_url="https://www.facebook.com/groups/99",
+        group_id="99",
+    )
+    probe = {"inaccessible": False, "empty_search": False}
+    extract_payload = {
+        "inaccessible": False,
+        "empty_search": False,
+        "posts": [
+            {
+                "post_url": "https://www.facebook.com/groups/99/posts/111/",
+                "message": "Hello job",
+                "author_name": "A",
+                "created_time": "2026-01-15T12:00:00.000Z",
+            }
+        ],
+    }
+    runner = _FakeExtractRunner([json.dumps(probe), json.dumps(extract_payload)])
+    posts = extract_group_job_posts(group, "keyword", 10, runner)
+    assert len(posts) == 1
+    assert posts[0].post_url.endswith("/posts/111/")
+    assert posts[0].message == "Hello job"
+    assert runner.snapshot_calls == 1
+
+
+def test_extract_group_job_posts_inaccessible_raises():
+    import json
+
+    group = DiscoveredGroup(
+        group_name="X",
+        group_url="https://www.facebook.com/groups/1",
+        group_id="1",
+    )
+    runner = _FakeExtractRunner(json.dumps({"inaccessible": True, "empty_search": False}))
+    with pytest.raises(BrowserAutomationError):
+        extract_group_job_posts(group, "k", 5, runner)
+    assert runner.snapshot_calls == 0

@@ -487,6 +487,11 @@ def _post_matches_publication_filter_for_report(p: Post, settings: Settings) -> 
 
 def build_report_context(session: Session, settings: Settings) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     posts = list(session.scalars(select(Post).order_by(Post.fetched_at.desc()).limit(500)))
+    # One row per post id: query should already be unique on PK; guard rare ORM/session duplicates.
+    _uniq: dict[str, Post] = {}
+    for p in posts:
+        _uniq.setdefault(p.id, p)
+    posts = list(_uniq.values())
     year_f = settings.browser_post_publication_year
     cutoff = browser_publication_cutoff_date(settings)
     if year_f is not None:
@@ -613,6 +618,21 @@ def resolve_browser_search_html_report_dir(folder: str) -> Path:
     return (repo / "report" / f"search_{raw}").resolve()
 
 
+def resolve_report_html_dir_for_email(folder: str) -> Path:
+    """Resolve a report HTML directory (``agentic_search_*``, ``search_*``, or absolute path)."""
+    raw = (folder or "").strip()
+    if not raw:
+        raise ValueError("report folder path is empty")
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        return candidate.resolve()
+    repo = _repo_base_dir()
+    rel = raw.replace("\\", "/").removeprefix("./")
+    if rel.startswith("report/"):
+        return (repo / rel).resolve()
+    return (repo / "report" / raw).resolve()
+
+
 def send_browser_search_html_report_email(
     settings: Settings | None = None,
     *,
@@ -693,11 +713,18 @@ def find_latest_browser_search_report_dir() -> Path:
     return max(dirs, key=lambda p: p.name).resolve()
 
 
-def run_daily_report_with_latest_browser_html_email(settings: Settings | None = None) -> dict[str, Any]:
+def run_daily_report_with_latest_browser_html_email(
+    settings: Settings | None = None,
+    *,
+    browser_html_report_dir: str | Path | None = None,
+) -> dict[str, Any]:
     """Build the daily CSV report and send **one** email with CSVs, CSV-aligned HTML, and Playwright HTML.
 
     Always attaches ``daily_posts_<run_stamp>.html`` (same rows as the main CSV) plus the latest
     ``report/search_*/index.html`` copy when available.
+
+    When ``browser_html_report_dir`` is set (basename under ``report/``, ``report/<name>``, or absolute path),
+    that folder's ``index.html`` is attached instead of the newest ``report/search_*``.
 
     JSON matches the daily ``POST /admin/report`` payload (``csv``, ``rows``, ``run_stamp``, …,
     ``daily_posts_html``, …) and adds ``html_report_dir``, ``browser_html_search_stamp``,
@@ -710,15 +737,24 @@ def run_daily_report_with_latest_browser_html_email(settings: Settings | None = 
     and sets browser fields to indicate skip/failure.
     """
     settings = settings or get_settings()
-    try:
-        d = find_latest_browser_search_report_dir()
-    except FileNotFoundError as exc:
-        out = run_daily_report(settings)
-        out["html_report_dir"] = None
-        out["browser_html_email_sent"] = False
-        out["browser_html_ok"] = False
-        out["browser_html_error"] = str(exc)
-        return out
+    explicit = browser_html_report_dir is not None and str(browser_html_report_dir).strip()
+    if explicit:
+        try:
+            d = resolve_report_html_dir_for_email(str(browser_html_report_dir).strip())
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        if not (d / "index.html").is_file():
+            return {"ok": False, "error": f"missing index.html under {d}"}
+    else:
+        try:
+            d = find_latest_browser_search_report_dir()
+        except FileNotFoundError as exc:
+            out = run_daily_report(settings)
+            out["html_report_dir"] = None
+            out["browser_html_email_sent"] = False
+            out["browser_html_ok"] = False
+            out["browser_html_error"] = str(exc)
+            return out
 
     report, analysis, csv_path, extras, out = _build_daily_report_artifacts(settings)
     if not out.get("ok"):

@@ -9,7 +9,7 @@ This document describes how **Claude / Anthropic** credentials are loaded and wh
 | **`ANTHROPIC_API_KEY`** | API key for Anthropic Claude (server-side only). Optional: many flows work without it. |
 | **`CLAUDE_MODEL`** | Model id for API calls (default: `claude-3-5-sonnet-20241022`). |
 
-Copy from [.env.example](.env.example) into your local `.env`. **Never commit `.env` or paste keys into chats or logs.**
+Copy from [.env.example](.env.example) into your local `.env` (Anthropic keys live in the **Anthropic** section; optional **`ENABLE_BROWSER_META_CHALLENGE_VISION`** sits under Playwright). **Never commit `.env` or paste keys into chats or logs.**
 
 ## Configuration in code
 
@@ -36,14 +36,14 @@ They are **not** fields on the main **`Settings`** class in `src/config.py`.
 
 | Script | Anthropic in process |
 |--------|----------------------|
-| **`scripts/run_agentic_facebook_once.py`** | **Removed** after loading `.env` (`ANTHROPIC_API_KEY` and `CLAUDE_MODEL` are popped). Use this for a clean agentic run without Claude or challenge vision. |
-| **`scripts/run_agentic_facebook_once_anthropic.py`** | **Kept** — same sync as above, but keys stay available for **`ENABLE_BROWSER_META_CHALLENGE_VISION`** if you enable it. |
+| **`scripts/run_agentic/run_agentic_facebook_once.py`** | **Removed** after loading `.env` (`ANTHROPIC_API_KEY` and `CLAUDE_MODEL` are popped). Use this for a clean agentic run without Claude or challenge vision. |
+| **`scripts/run_agentic/run_agentic_facebook_once_anthropic.py`** | **Kept** — same sync as above, but keys stay available for **`ENABLE_BROWSER_META_CHALLENGE_VISION`** if you enable it. |
 
 Example (from repo root, with your venv):
 
 ```bash
-.venv/bin/python scripts/run_agentic_facebook_once.py
-.venv/bin/python scripts/run_agentic_facebook_once_anthropic.py --group-limit 5 --post-limit 25
+.venv/bin/python scripts/run_agentic/run_agentic_facebook_once.py
+.venv/bin/python scripts/run_agentic/run_agentic_facebook_once_anthropic.py --group-limit 5 --post-limit 25
 ```
 
 ## Daily report from the CLI

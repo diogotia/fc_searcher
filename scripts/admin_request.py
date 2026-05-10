@@ -2,7 +2,8 @@
 """Admin API helper: sync, daily report (POST), browser HTML report email (POST), or stored-post search (GET).
 
 Uses ADMIN_TOKEN and API_HOST from ``.env``. Daily DB+CSV email is ``report``; browser Playwright HTML is
-``report-browser-html <search_folder>`` or ``report-browser-html-last`` (newest ``report/search_*`` on disk).
+``report-browser-html <search_folder>`` or ``report-browser-html-last [html_report_dir]`` (optional folder:
+basename under ``report/``, ``report/…``, or absolute path; default newest ``report/search_*`` on disk).
 In Docker, mount the repo ``report/`` directory so ``index.html`` exists inside the container.
 """
 
@@ -86,9 +87,16 @@ def main() -> int:
         "search_folder",
         help="e.g. search_20260426T113551Z or 20260426T113551Z (under repo report/)",
     )
-    sub.add_parser(
+    p_rbhl = sub.add_parser(
         "report-browser-html-last",
-        help="POST /admin/report-browser-html-last (daily report + latest report/search_* HTML email)",
+        help="POST /admin/report-browser-html-last (daily CSVs + daily_posts HTML + browser HTML email)",
+    )
+    p_rbhl.add_argument(
+        "html_report_dir",
+        nargs="?",
+        default=None,
+        help="Optional folder: absolute path, or basename under report/ (e.g. agentic_search_20260509T065719Z). "
+        "Default: newest report/search_*.",
     )
 
     p_search = sub.add_parser("search", help="GET /admin/posts/search (stored posts)")
@@ -111,10 +119,13 @@ def main() -> int:
         body = _urlopen_with_retries(req, timeout=300)
     elif args.cmd == "report-browser-html-last":
         url = f"{host}/admin/report-browser-html-last"
+        payload: dict[str, str] = {}
+        if getattr(args, "html_report_dir", None):
+            payload["html_report_dir"] = str(args.html_report_dir).strip()
         req = urllib.request.Request(
             url,
             method="POST",
-            data=b"{}",
+            data=json.dumps(payload).encode("utf-8"),
             headers={"X-Admin-Token": token, "Content-Type": "application/json"},
         )
         body = _urlopen_with_retries(req, timeout=300)

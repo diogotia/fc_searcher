@@ -3,23 +3,24 @@
 ================================================================================
 
 Need expanded text + fewer DB rows ( Ещё / See more + body keyword OR ) ?
-  -> .venv/bin/python scripts/run_agentic_facebook_exact_posts.py
+  -> .venv/bin/python scripts/run_agentic/run_agentic_facebook_exact_posts.py
      (+ optional --in-group-exact-keywords)
 
 Need Facebook YEAR filter on each in-group URL (filters= from .env year) ?
   -> Set BROWSER_POST_PUBLICATION_YEAR in .env, then:
-     .venv/bin/python scripts/run_agentic_facebook_once_exact_year.py
+     .venv/bin/python scripts/run_agentic/run_agentic_facebook_once_exact_year.py
 
 Fast scan, keep all scraped posts?
-  -> .venv/bin/python scripts/run_agentic_facebook_once.py
+  -> .venv/bin/python scripts/run_agentic/run_agentic_facebook_once.py
 
 --------------------------------------------------------------------------------
-Always: ENABLE_AGENTIC_FACEBOOK_SYNC=true
+Always: ENABLE_AGENTIC_FACEBOOK_SYNC=true  (see repo .env.example → Agentic Facebook)
+Shared BROWSER_* queries/seeds: same file, "Classic Playwright browser group search"
 Artifacts: output/agentic_facebook/<timestamp>/   report/agentic_search_<stamp>/
 --------------------------------------------------------------------------------
 
 Example (exact posts + exact tokens):
-  .venv/bin/python scripts/run_agentic_facebook_exact_posts.py \
+  .venv/bin/python scripts/run_agentic/run_agentic_facebook_exact_posts.py \
     --query "ищу работу в Германии" \
     --in-group-exact-keywords \
     --in-group-query "Бетонщик,Арматурщик" \

@@ -232,6 +232,20 @@ def test_resolve_browser_search_html_report_dir(monkeypatch, tmp_path):
     assert pl.resolve_browser_search_html_report_dir("search_mytest") == d.resolve()
 
 
+def test_resolve_report_html_dir_for_email(monkeypatch, tmp_path):
+    monkeypatch.setenv("FC_SEARCHER_REPO_ROOT", str(tmp_path))
+    _stub_fc_repo_root(tmp_path)
+    agentic = tmp_path / "report" / "agentic_search_x"
+    agentic.mkdir(parents=True)
+    assert pl.resolve_report_html_dir_for_email("agentic_search_x") == agentic.resolve()
+    nested = tmp_path / "report" / "nested" / "y"
+    nested.mkdir(parents=True)
+    assert pl.resolve_report_html_dir_for_email("report/nested/y") == nested.resolve()
+    abs_d = tmp_path / "abs" / "z"
+    abs_d.mkdir(parents=True)
+    assert pl.resolve_report_html_dir_for_email(str(abs_d)) == abs_d.resolve()
+
+
 def test_send_browser_search_html_report_email_missing_index(tmp_path):
     from src.config import Settings
 

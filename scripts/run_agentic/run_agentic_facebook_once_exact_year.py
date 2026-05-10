@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Run one opt-in agentic Facebook sync using project `.env`.
+"""Run agentic Facebook sync with Facebook web UI “creation time” year filter on group search URLs.
 
-Usage from repo root:
+Reads ``BROWSER_POST_PUBLICATION_YEAR`` (required: integer year or ``auto``). Builds the same
+base64 ``filters=`` token Facebook uses when you restrict search results to a calendar year and
+appends it to every in-group URL:
 
-    .venv/bin/python scripts/run_agentic_facebook_once.py
+``/groups/<id>/search/?q=<phrase>&filters=<token>``
 
-Set `ENABLE_AGENTIC_FACEBOOK_SYNC=true` to execute. This script uses the separate
-agentic flow and does not call `run_browser_search_once.py`.
+All groups from discovery and ``BROWSER_SEED_GROUP_URLS`` use this URL shape.
 
-Anthropic (``ANTHROPIC_API_KEY`` / ``CLAUDE_MODEL``) is removed from the environment
-before loading settings so this run does not use Claude analysis or Meta challenge vision.
-Use ``scripts/run_agentic_facebook_once_anthropic.py`` when you need those keys (same sync).
+Usage::
+
+    .venv/bin/python scripts/run_agentic/run_agentic_facebook_once_exact_year.py
+
+Requires ``ENABLE_AGENTIC_FACEBOOK_SYNC=true``. Same CLI flags as ``scripts/run_agentic/run_agentic_facebook_once.py``
+except this script always enables ``facebook_ui_year_filter`` (no separate flag).
+
+Anthropic env vars are stripped like ``scripts/run_agentic/run_agentic_facebook_once.py``.
 """
 
 from __future__ import annotations
@@ -22,11 +28,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parent
-_REPO = _SCRIPTS.parent
+_RUN_AGENTIC_DIR = Path(__file__).resolve().parent
+_SCRIPTS_ROOT = _RUN_AGENTIC_DIR.parent
+_REPO = _SCRIPTS_ROOT.parent
 os.environ.setdefault("FC_SEARCHER_REPO_ROOT", str(_REPO))
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+if str(_SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_ROOT))
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
@@ -83,7 +90,7 @@ def _die_py310_hint() -> None:
         "  Fix:\n"
         "    brew install python@3.12\n"
         "    ./scripts/recreate_venv_for_mcp.sh\n"
-        "    .venv/bin/python scripts/run_agentic_facebook_once.py\n",
+        "    .venv/bin/python scripts/run_agentic/run_agentic_facebook_once_exact_year.py\n",
         file=sys.stderr,
     )
 
@@ -93,7 +100,9 @@ def main() -> int:
         _die_py310_hint()
         return 2
 
-    parser = argparse.ArgumentParser(description="Run agentic Facebook sync once (reads .env).")
+    parser = argparse.ArgumentParser(
+        description="Agentic Facebook sync with Facebook UI creation-year filter on in-group search URLs."
+    )
     parser.add_argument("--query", default=None, help="Override BROWSER_SEARCH_QUERY")
     parser.add_argument("--in-group-query", default=None, dest="in_group_query")
     parser.add_argument("--group-limit", type=int, default=None, metavar="N")
@@ -103,13 +112,11 @@ def main() -> int:
     parser.add_argument(
         "--in-group-exact-keywords",
         action="store_true",
-        help="In-group /groups/.../search/?q= uses only --in-group-query (or BROWSER_IN_GROUP_SEARCH_QUERY) "
-        "tokens, no prefix from BROWSER_SEARCH_QUERY (e.g. Бетонщик not 'ищу... Бетонщик').",
+        help="In-group search uses tokens only (see scripts/run_agentic/run_agentic_facebook_once.py).",
     )
     args = parser.parse_args()
 
     load_dotenv_file()
-    # Isolate from Anthropic credentials (see src.config_anthropic).
     os.environ.pop("ANTHROPIC_API_KEY", None)
     os.environ.pop("CLAUDE_MODEL", None)
     try:
@@ -129,6 +136,15 @@ def main() -> int:
 
     clear_settings_caches()
     settings = get_settings()
+    if settings.browser_post_publication_year is None:
+        print(
+            "error: BROWSER_POST_PUBLICATION_YEAR must be set (e.g. 2026 or auto) "
+            "so the Facebook UI year filter can be built.\n"
+            "  This script appends the same creation-time filter Meta uses for that calendar year.",
+            file=sys.stderr,
+        )
+        return 2
+
     init_engine(settings.database_url)
     init_db()
     gmc = args.global_message_contains
@@ -143,6 +159,7 @@ def main() -> int:
         seed_group_urls=args.seed_group_urls,
         global_message_contains=gmc,
         in_group_exact_keywords=bool(args.in_group_exact_keywords),
+        facebook_ui_year_filter=True,
     )
     print(json.dumps(out, indent=2, default=str))
     return 0 if out.get("ok") else 1

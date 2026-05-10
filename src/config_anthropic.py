@@ -2,7 +2,7 @@
 
 Daily reports, ``run_analyze_recent``, and optional Meta challenge vision read credentials here.
 Agentic Facebook sync without Anthropic should strip ``ANTHROPIC_API_KEY`` from the environment
-before imports (see ``scripts/run_agentic_facebook_once.py``).
+before imports (see ``scripts/run_agentic/run_agentic_facebook_once.py``).
 """
 
 from __future__ import annotations

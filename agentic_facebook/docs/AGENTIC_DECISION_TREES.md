@@ -162,7 +162,7 @@ ERROR: "Disk full"
 ### **run_agentic_facebook_exact_posts.py**
 
 ```bash
-python scripts/run_agentic_facebook_exact_posts.py \
+python scripts/run_agentic/run_agentic_facebook_exact_posts.py \
   --query "<DISCOVERY_PHRASE>" \
   --in-group-query "<TOKEN1>,<TOKEN2>,<TOKEN3>" \
   --in-group-exact-keywords \
@@ -181,7 +181,7 @@ python scripts/run_agentic_facebook_exact_posts.py \
 ### **run_agentic_facebook_once.py**
 
 ```bash
-python scripts/run_agentic_facebook_once.py \
+python scripts/run_agentic/run_agentic_facebook_once.py \
   --query "<DISCOVERY_PHRASE>" \
   --group-limit 50 \
   --post-limit 100
@@ -198,7 +198,7 @@ python scripts/run_agentic_facebook_once.py \
 Requires **`BROWSER_POST_PUBLICATION_YEAR`** in `.env` (no `--year` CLI flag).
 
 ```bash
-python scripts/run_agentic_facebook_once_exact_year.py \
+python scripts/run_agentic/run_agentic_facebook_once_exact_year.py \
   --query "<DISCOVERY_PHRASE>" \
   --group-limit 50 \
   --post-limit 100
@@ -261,17 +261,17 @@ report/agentic_search_20260503_143000/
 
 **Quick job posts scan:**
 ```bash
-python scripts/run_agentic_facebook_exact_posts.py --query "ищу работу в Германии" --in-group-query "бетон,аромат,камен" --in-group-exact-keywords --group-limit 30 --post-limit 50
+python scripts/run_agentic/run_agentic_facebook_exact_posts.py --query "ищу работу в Германии" --in-group-query "бетон,аромат,камен" --in-group-exact-keywords --group-limit 30 --post-limit 50
 ```
 
 **Year-scoped group search URLs** (year from **`BROWSER_POST_PUBLICATION_YEAR`**):
 ```bash
-python scripts/run_agentic_facebook_once_exact_year.py --query "Україна Німеччина" --group-limit 20
+python scripts/run_agentic/run_agentic_facebook_once_exact_year.py --query "Україна Німеччина" --group-limit 20
 ```
 
 **Exploratory fast scan:**
 ```bash
-python scripts/run_agentic_facebook_once.py --query "tech jobs" --group-limit 15 --post-limit 30
+python scripts/run_agentic/run_agentic_facebook_once.py --query "tech jobs" --group-limit 15 --post-limit 30
 ```
 
 ---

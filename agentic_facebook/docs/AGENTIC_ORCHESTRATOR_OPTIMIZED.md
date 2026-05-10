@@ -236,7 +236,7 @@ text = browser.evaluate("document.body.innerText")
 **Goal:** Find all construction worker job posts in German Facebook groups; expand truncated text; keep only posts matching specific trades.
 
 ```bash
-.venv/bin/python scripts/run_agentic_facebook_exact_posts.py \
+.venv/bin/python scripts/run_agentic/run_agentic_facebook_exact_posts.py \
   --query "ищу работу в Германии" \
   --in-group-query "ищу работу Бетонщик,ищу работу Арматурщик,ищу работу Каменщик" \
   --in-group-exact-keywords \
@@ -259,7 +259,7 @@ text = browser.evaluate("document.body.innerText")
 **Goal:** Fast exploratory scan; all posts kept.
 
 ```bash
-.venv/bin/python scripts/run_agentic_facebook_once.py \
+.venv/bin/python scripts/run_agentic/run_agentic_facebook_once.py \
   --query "tech jobs Berlin" \
   --group-limit 20 \
   --post-limit 50
@@ -280,7 +280,7 @@ text = browser.evaluate("document.body.innerText")
 Set **`BROWSER_POST_PUBLICATION_YEAR=2026`** (or another year / `auto` per project docs), then:
 
 ```bash
-.venv/bin/python scripts/run_agentic_facebook_once_exact_year.py \
+.venv/bin/python scripts/run_agentic/run_agentic_facebook_once_exact_year.py \
   --query "Україна Німеччина" \
   --group-limit 30 \
   --post-limit 150
@@ -315,7 +315,7 @@ There is **no** `--year` CLI flag; the year comes from **`BROWSER_POST_PUBLICATI
 | `expand_see_more: false` in all posts | Selector mismatch for "Ещё" button | Check DOM, update selector in script |
 | Upserted count << found count | Keyword filter too strict | Relax `--in-group-query` or remove `--in-group-exact-keywords` |
 | "Facebook checkpoint required" | 2FA or anti-bot trigger | Manual login + checkpoint; restart run after |
-| JSON summary missing fields | Old script version | Use `python scripts/run_agentic_facebook_exact_posts.py --version` |
+| JSON summary missing fields | Old script version | Use `python scripts/run_agentic/run_agentic_facebook_exact_posts.py --version` |
 | Report HTML has 404 links | Artifact path misconfigured | Check **`AGENTIC_FACEBOOK_OUTPUT_DIR`** (and repo paths under `report/`) |
 
 ---

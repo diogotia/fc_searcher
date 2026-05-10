@@ -13,6 +13,8 @@ For script selection, deployment, decision trees, and troubleshooting:
 
 Optional check before runs: **`./scripts/agentic_preflight.sh`** from the repository root.
 
+Environment variable **names** and section grouping match the repo root **[`.env.example`](../.env.example)** (see **Agentic Facebook** plus shared **`BROWSER_*`** / seeds / limits).
+
 ## Enable
 
 Set these in `.env`:
@@ -41,7 +43,7 @@ Seed groups are always processed first, then discovered groups are added up to `
 CLI:
 
 ```bash
-.venv/bin/python scripts/run_agentic_facebook_once.py \
+.venv/bin/python scripts/run_agentic/run_agentic_facebook_once.py \
   --query "ищу работу" \
   --in-group-query "малярные работы" \
   --group-limit 5 \

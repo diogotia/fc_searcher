@@ -6,10 +6,10 @@
 
 ```bash
 # Confirm these files exist:
-ls -la scripts/run_agentic_facebook_exact_posts.py
-ls -la scripts/run_agentic_facebook_once.py
-ls -la scripts/run_agentic_facebook_once_exact_year.py
-ls -la scripts/run_agentic_facebook_once_anthropic.py  # If using Vision API
+ls -la scripts/run_agentic/run_agentic_facebook_exact_posts.py
+ls -la scripts/run_agentic/run_agentic_facebook_once.py
+ls -la scripts/run_agentic/run_agentic_facebook_once_exact_year.py
+ls -la scripts/run_agentic/run_agentic_facebook_once_anthropic.py  # If using Vision API
 
 # Confirm output directories exist or can be created:
 mkdir -p output/agentic_facebook
@@ -17,6 +17,8 @@ mkdir -p report/agentic_search
 ```
 
 ### 1.2 Environment Variables (.env)
+
+Canonical **names** and section order follow the repository root **[`.env.example`](../../.env.example)** (Agentic Facebook, Graph API, web login, Playwright **`BROWSER_*`**, publication filters, …). Copy that file to `.env` and edit values rather than inventing keys.
 
 ```bash
 # Required for ALL agentic scripts:
@@ -138,7 +140,7 @@ echo "  ✓ Network OK"
 
 # 7. Scripts
 echo "[7/8] Checking scripts..."
-[ ! -f "scripts/run_agentic_facebook_exact_posts.py" ] && echo "  ✗ Missing scripts" && exit 1
+[ ! -f "scripts/run_agentic/run_agentic_facebook_exact_posts.py" ] && echo "  ✗ Missing scripts" && exit 1
 echo "  ✓ Scripts OK"
 
 # 8. Logs
@@ -149,7 +151,7 @@ echo "  ✓ Logs OK"
 echo ""
 echo "=== ALL CHECKS PASSED ==="
 echo "Ready to execute. Choose script and run:"
-echo "  python scripts/run_agentic_facebook_exact_posts.py --query '...' --in-group-query '...'"
+echo "  python scripts/run_agentic/run_agentic_facebook_exact_posts.py --query '...' --in-group-query '...'"
 ```
 
 Run preflight:
@@ -187,7 +189,7 @@ echo "Group Limit:     $GROUP_LIMIT"
 echo "Post Limit:      $POST_LIMIT"
 echo ""
 
-python scripts/run_agentic_facebook_exact_posts.py \
+python scripts/run_agentic/run_agentic_facebook_exact_posts.py \
   --query "$QUERY" \
   --in-group-query "$IN_GROUP_QUERY" \
   --in-group-exact-keywords \
@@ -233,7 +235,7 @@ echo "Group Limit:  $GROUP_LIMIT"
 echo "Post Limit:   $POST_LIMIT"
 echo ""
 
-python scripts/run_agentic_facebook_once.py \
+python scripts/run_agentic/run_agentic_facebook_once.py \
   --query "$QUERY" \
   --group-limit "$GROUP_LIMIT" \
   --post-limit "$POST_LIMIT" \
@@ -275,7 +277,7 @@ echo "Group Limit:  $GROUP_LIMIT"
 echo "Post Limit:   $POST_LIMIT"
 echo ""
 
-python scripts/run_agentic_facebook_once_exact_year.py \
+python scripts/run_agentic/run_agentic_facebook_once_exact_year.py \
   --query "$QUERY" \
   --group-limit "$GROUP_LIMIT" \
   --post-limit "$POST_LIMIT" \
@@ -453,7 +455,7 @@ for kw, count in keywords.most_common():
 | `ERROR: ENABLE_AGENTIC_FACEBOOK_SYNC not found` | `.env` not loaded | `source .env` or add to `.bashrc` |
 | `ModuleNotFoundError: playwright` | Missing dependency | `pip install -r requirements.txt` |
 | `Facebook checkpoint required` | 2FA / anti-bot | Manually complete in browser, restart script |
-| `expand_see_more: false` (all posts) | Selector wrong | Check DOM, update `scripts/run_agentic_facebook_exact_posts.py` line XYZ |
+| `expand_see_more: false` (all posts) | Selector wrong | Check DOM, update `scripts/run_agentic/run_agentic_facebook_exact_posts.py` line XYZ |
 | `0 posts upserted (found 50)` | Keyword filter too strict | Relax `--in-group-query` or remove `--in-group-exact-keywords` |
 | `psycopg2.OperationalError: FATAL: password authentication failed` | DB credentials wrong | Check `DATABASE_URL` in `.env` |
 | `OSError: No space left on device` | Disk full | `du -sh output/agentic_facebook/` and clean old runs |
@@ -471,7 +473,7 @@ for kw, count in keywords.most_common():
 crontab -e
 
 # Add daily run at 02:00 UTC:
-0 2 * * * cd /path/to/fc_searcher && source .venv/bin/activate && python scripts/run_agentic_facebook_exact_posts.py --query "ищу работу в Германии" --in-group-query "бетон,армат,камен" --group-limit 50 --post-limit 100 >> logs/cron.log 2>&1
+0 2 * * * cd /path/to/fc_searcher && source .venv/bin/activate && python scripts/run_agentic/run_agentic_facebook_exact_posts.py --query "ищу работу в Германии" --in-group-query "бетон,армат,камен" --group-limit 50 --post-limit 100 >> logs/cron.log 2>&1
 
 # Verify:
 crontab -l

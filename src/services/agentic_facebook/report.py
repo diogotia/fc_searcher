@@ -54,7 +54,7 @@ def write_agentic_facebook_html_report(
                 group_blocks.append('<p class="muted">No posts in this group for this run.</p>')
                 continue
             group_blocks.append(
-                "<table><thead><tr><th>Id</th><th>Author</th><th>Message</th><th>Link</th></tr></thead><tbody>"
+                "<table><thead><tr><th>Id</th><th>Author</th><th>Match</th><th>Message</th><th>Link</th></tr></thead><tbody>"
             )
             for post in posts:
                 raw = post.get("raw_json") if isinstance(post.get("raw_json"), dict) else {}
@@ -66,10 +66,20 @@ def write_agentic_facebook_html_report(
                 link_cell = (
                     f'<a href="{html.escape(post_url, quote=True)}">open</a>' if post_url else "-"
                 )
+                matched_keyword = str(post.get("matched_in_post_keyword") or "")
+                matched_via = str(post.get("matched_in_post_variant") or "")
+                if matched_keyword:
+                    title_attr = ""
+                    if matched_via and matched_via != matched_keyword:
+                        title_attr = f' title="{html.escape("Matched via: " + matched_via, quote=True)}"'
+                    match_cell = f'<span class="badge"{title_attr}>{html.escape(matched_keyword)}</span>'
+                else:
+                    match_cell = "-"
                 group_blocks.append(
                     "<tr>"
                     f'<td class="mono">{html.escape(str(post.get("id") or ""))}</td>'
                     f"<td>{html.escape(str(post.get('author_name') or ''))}</td>"
+                    f"<td>{match_cell}</td>"
                     f'<td class="msg">{html.escape(_truncate(str(post.get("message") or "")))}</td>'
                     f"<td>{link_cell}</td>"
                     "</tr>"
@@ -96,6 +106,15 @@ def write_agentic_facebook_html_report(
         )
     if sync_summary.get("global_message_contains"):
         summary_rows.insert(6, ("Message must contain", str(sync_summary["global_message_contains"])))
+    if sync_summary.get("body_keyword_source"):
+        summary_rows.append(("Body OR-filter source", str(sync_summary["body_keyword_source"])))
+    if sync_summary.get("in_post_keywords"):
+        summary_rows.append(
+            (
+                "In-post keywords (OR)",
+                ", ".join(str(v) for v in sync_summary["in_post_keywords"]),
+            )
+        )
 
     summary_table = "".join(
         f"<tr><th>{html.escape(k)}</th><td>{html.escape(v)}</td></tr>" for k, v in summary_rows
@@ -116,6 +135,7 @@ def write_agentic_facebook_html_report(
     .msg {{ white-space: pre-wrap; }}
     .meta, .muted {{ color: #666; }}
     pre.raw {{ background: #f8f8f8; padding: 1rem; overflow: auto; font-size: 0.75rem; }}
+    .badge {{ display: inline-block; padding: 0.1rem 0.4rem; border: 1px solid #888; border-radius: 0.4rem; background: #eef; font-size: 0.75rem; }}
   </style>
 </head>
 <body>

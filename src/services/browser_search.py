@@ -6,6 +6,7 @@ import json
 from src.logging_config import get_logger
 import os
 import re
+import unicodedata
 from collections import defaultdict
 import subprocess
 import textwrap
@@ -164,6 +165,255 @@ def _wrap_playwright_cli_run_code_json(
     )
 
 
+_GROUP_SEARCH_PROBE_JS = textwrap.dedent(
+    """
+async (page) => {
+  const _fcSleep = async (totalMs) => {
+    const step = 200;
+    for (let t = 0; t < totalMs; t += step) {
+      try {
+        await page.evaluate(
+          (ms) => new Promise((r) => globalThis.setTimeout(r, ms)),
+          Math.min(step, totalMs - t)
+        );
+      } catch (e) {
+        await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => {});
+      }
+    }
+  };
+  await page.waitForLoadState('domcontentloaded', { timeout: 45000 }).catch(() => {});
+  await _fcSleep(500);
+  let probe = { inaccessible: false, empty_search: false };
+  for (let _fcA = 0; _fcA < 3; _fcA += 1) {
+    try {
+      await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      probe = await page.evaluate(() => {
+        const squeeze = (value) => (value || "").replace(/\\s+/g, " ").trim();
+        const bodyText = squeeze(document.body?.innerText || "");
+        if (/content isn't available|This content isn't available|join group to see/i.test(bodyText)) {
+          return { inaccessible: true, empty_search: false };
+        }
+        const ruEmpty =
+          /Поиск в этой группе не дал результатов|в этой группе не дал результатов/i.test(bodyText);
+        const enEmpty =
+          /didn't match any results|no results for your search|We couldn't find anything for/i.test(
+            bodyText
+          );
+        if (ruEmpty || enEmpty) {
+          return { inaccessible: false, empty_search: true };
+        }
+        return { inaccessible: false, empty_search: false };
+      });
+      break;
+    } catch (e) {
+      if (_fcA === 2) throw e;
+      await _fcSleep(600);
+    }
+  }
+  return JSON.stringify(probe);
+}
+"""
+).strip()
+
+_GROUP_SEARCH_SCROLL_AND_EXTRACT_JS = textwrap.dedent(
+    """
+async (page) => {
+  const _fcSleep = async (totalMs) => {
+    const step = 200;
+    for (let t = 0; t < totalMs; t += step) {
+      try {
+        await page.evaluate(
+          (ms) => new Promise((r) => globalThis.setTimeout(r, ms)),
+          Math.min(step, totalMs - t)
+        );
+      } catch (e) {
+        await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => {});
+      }
+    }
+  };
+  await page.waitForLoadState('domcontentloaded', { timeout: 45000 }).catch(() => {});
+  await _fcSleep(500);
+  for (let _fcI = 0; _fcI < __SCROLL_ROUNDS__; _fcI += 1) {
+    await page.mouse.wheel(0, (page.viewportSize()?.height) || 720);
+    await _fcSleep(__SCROLL_PAUSE_MS__);
+  }
+  let extracted = { inaccessible: false, posts: [] };
+  for (let _fcA = 0; _fcA < 3; _fcA += 1) {
+    try {
+      await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      extracted = await page.evaluate(() => {
+        const squeeze = (value) => (value || "").replace(/\\s+/g, " ").trim();
+        const bodyText = squeeze(document.body?.innerText || "");
+        if (/content isn't available|This content isn't available|join group to see/i.test(bodyText)) {
+          return { inaccessible: true, posts: [] };
+        }
+        const postAnchors = Array.from(
+          document.querySelectorAll(
+            'a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="], a[href*="multi_permalinks="]'
+          )
+        );
+        const seen = new Set();
+        const posts = [];
+        for (const anchor of postAnchors) {
+          const href = anchor.href || "";
+          if (!href || seen.has(href)) continue;
+          const article =
+            anchor.closest('[role="article"]') ||
+            anchor.closest('div[data-pagelet]') ||
+            anchor.parentElement;
+          const text = squeeze(article?.innerText || anchor.textContent || "");
+          if (!text) continue;
+          const timeEl = article?.querySelector('a[aria-label] time, time');
+          const authorEl = article?.querySelector('h2 a, h3 a, strong a');
+          seen.add(href);
+          posts.push({
+            post_url: href,
+            message: text.slice(0, 4000),
+            author_name: squeeze(authorEl?.textContent || ""),
+            created_time: timeEl?.getAttribute("datetime") || "",
+          });
+        }
+        return { inaccessible: false, posts };
+      });
+      break;
+    } catch (e) {
+      if (_fcA === 2) throw e;
+      await _fcSleep(600);
+    }
+  }
+  if (extracted.inaccessible) {
+    return JSON.stringify({ inaccessible: true, empty_search: false, posts: [] });
+  }
+  return JSON.stringify({ inaccessible: false, empty_search: false, posts: extracted.posts });
+}
+"""
+).strip()
+
+
+def _build_group_search_scroll_extract_run_code(*, scroll_rounds: int = 4, scroll_pause_ms: int = 900) -> str:
+    """Scroll feed then extract post anchors (run after empty/inaccessible probe)."""
+    code = _GROUP_SEARCH_SCROLL_AND_EXTRACT_JS.replace("__SCROLL_ROUNDS__", str(int(scroll_rounds))).replace(
+        "__SCROLL_PAUSE_MS__", str(int(scroll_pause_ms))
+    )
+    return code
+
+
+_GROUP_SEARCH_EXTRACT_JS = textwrap.dedent(
+    """
+async (page) => {
+  const _fcSleep = async (totalMs) => {
+    const step = 200;
+    for (let t = 0; t < totalMs; t += step) {
+      try {
+        await page.evaluate(
+          (ms) => new Promise((r) => globalThis.setTimeout(r, ms)),
+          Math.min(step, totalMs - t)
+        );
+      } catch (e) {
+        await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => {});
+      }
+    }
+  };
+  await page.waitForLoadState('domcontentloaded', { timeout: 45000 }).catch(() => {});
+  await _fcSleep(500);
+  let probe = { inaccessible: false, empty_search: false };
+  for (let _fcA = 0; _fcA < 3; _fcA += 1) {
+    try {
+      await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      probe = await page.evaluate(() => {
+        const squeeze = (value) => (value || "").replace(/\\s+/g, " ").trim();
+        const bodyText = squeeze(document.body?.innerText || "");
+        if (/content isn't available|This content isn't available|join group to see/i.test(bodyText)) {
+          return { inaccessible: true, empty_search: false };
+        }
+        const ruEmpty =
+          /Поиск в этой группе не дал результатов|в этой группе не дал результатов/i.test(bodyText);
+        const enEmpty =
+          /didn't match any results|no results for your search|We couldn't find anything for/i.test(
+            bodyText
+          );
+        if (ruEmpty || enEmpty) {
+          return { inaccessible: false, empty_search: true };
+        }
+        return { inaccessible: false, empty_search: false };
+      });
+      break;
+    } catch (e) {
+      if (_fcA === 2) throw e;
+      await _fcSleep(600);
+    }
+  }
+  if (probe.inaccessible) {
+    return JSON.stringify({ inaccessible: true, empty_search: false, posts: [] });
+  }
+  if (probe.empty_search) {
+    return JSON.stringify({ inaccessible: false, empty_search: true, posts: [] });
+  }
+  for (let _fcI = 0; _fcI < __SCROLL_ROUNDS__; _fcI += 1) {
+    await page.mouse.wheel(0, (page.viewportSize()?.height) || 720);
+    await _fcSleep(__SCROLL_PAUSE_MS__);
+  }
+  let extracted = { inaccessible: false, posts: [] };
+  for (let _fcA = 0; _fcA < 3; _fcA += 1) {
+    try {
+      await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      extracted = await page.evaluate(() => {
+        const squeeze = (value) => (value || "").replace(/\\s+/g, " ").trim();
+        const bodyText = squeeze(document.body?.innerText || "");
+        if (/content isn't available|This content isn't available|join group to see/i.test(bodyText)) {
+          return { inaccessible: true, posts: [] };
+        }
+        const postAnchors = Array.from(
+          document.querySelectorAll(
+            'a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="], a[href*="multi_permalinks="]'
+          )
+        );
+        const seen = new Set();
+        const posts = [];
+        for (const anchor of postAnchors) {
+          const href = anchor.href || "";
+          if (!href || seen.has(href)) continue;
+          const article =
+            anchor.closest('[role="article"]') ||
+            anchor.closest('div[data-pagelet]') ||
+            anchor.parentElement;
+          const text = squeeze(article?.innerText || anchor.textContent || "");
+          if (!text) continue;
+          const timeEl = article?.querySelector('a[aria-label] time, time');
+          const authorEl = article?.querySelector('h2 a, h3 a, strong a');
+          seen.add(href);
+          posts.push({
+            post_url: href,
+            message: text.slice(0, 4000),
+            author_name: squeeze(authorEl?.textContent || ""),
+            created_time: timeEl?.getAttribute("datetime") || "",
+          });
+        }
+        return { inaccessible: false, posts };
+      });
+      break;
+    } catch (e) {
+      if (_fcA === 2) throw e;
+      await _fcSleep(600);
+    }
+  }
+  if (extracted.inaccessible) {
+    return JSON.stringify({ inaccessible: true, empty_search: false, posts: [] });
+  }
+  return JSON.stringify({ inaccessible: false, empty_search: false, posts: extracted.posts });
+}
+"""
+).strip()
+
+
+def _build_group_search_extract_run_code(*, scroll_rounds: int = 4, scroll_pause_ms: int = 900) -> str:
+    """Single playwright-cli run: probe empty/inaccessible UI before scroll, then extract posts."""
+    code = _GROUP_SEARCH_EXTRACT_JS.replace("__SCROLL_ROUNDS__", str(int(scroll_rounds))).replace(
+        "__SCROLL_PAUSE_MS__", str(int(scroll_pause_ms))
+    )
+    return code
+
+
 class ManualLoginRequiredError(BrowserAutomationError):
     pass
 
@@ -211,6 +461,11 @@ class PlaywrightCliRunner:
     def session_name(self) -> str:
         return self._session_name
 
+    @property
+    def headed(self) -> bool:
+        """True when Playwright uses a visible browser window (``not BROWSER_HEADLESS``)."""
+        return self._headed
+
     def _goto_same_tab(self, url: str) -> None:
         """Navigate the session's existing page (avoids extra tabs from repeated ``playwright-cli open``)."""
         code = (
@@ -226,7 +481,13 @@ class PlaywrightCliRunner:
             args = ["open", url]
             if self._headed:
                 args.append("--headed")
+            logger.info(
+                "Playwright: starting browser session (headed=%s). "
+                "First launch can take 30–120s while Chromium or npm dependencies load.",
+                self._headed,
+            )
             self._run(args)
+            logger.info("Playwright: browser session ready (session=%s)", self._session_name)
             self._bootstrapped_cli_open = True
             return
         self._goto_same_tab(url)
@@ -297,13 +558,14 @@ class PlaywrightCliRunner:
         cmd = [*self._base_cmd, "--session", self._session_name, *args]
         env = self._playwright_child_env()
         try:
+            # Cold start (`playwright-cli open`, first npx fetch, Chromium launch) often exceeds 60s.
             proc = subprocess.run(
                 cmd,
                 cwd=str(Path.cwd()),
                 env=env,
                 capture_output=True,
                 text=True,
-                timeout=max(self._timeout_seconds + 15, 30),
+                timeout=max(self._timeout_seconds + 15, 120),
                 check=False,
             )
         except FileNotFoundError as exc:
@@ -675,6 +937,117 @@ def _split_in_group_query_tokens(raw: str) -> list[str]:
     return out
 
 
+def parse_in_post_keywords(raw: str | None) -> list[str]:
+    """Parse comma/newline tokens for ``BROWSER_IN_GROUP_SEARCH_IN_POST``.
+
+    Returns a list of trimmed, non-empty trade-role keywords (e.g.
+    ``["Каменщик", "Бетонщик", "Монтажник металлоконструкций"]``). Tokens may
+    contain spaces; commas and newlines are the only separators.
+    """
+    return _split_in_group_query_tokens((raw or "").strip())
+
+
+def normalize_for_in_post_match(s: str) -> str:
+    """Normalize text for trade-keyword substring matching (Unicode + case + whitespace)."""
+    if not s:
+        return ""
+    t = unicodedata.normalize("NFC", str(s).strip())
+    t = re.sub(r"\s+", " ", t)
+    return t.casefold()
+
+
+# Extra search variants keyed by ``normalize_for_in_post_match(canon_needle)``.
+# Each canonical CSV token from ``BROWSER_IN_GROUP_SEARCH_IN_POST`` is always searched first;
+# these tuples add synonyms, inflections, and common typos (e.g. Гипсакартон → гипсокартон).
+_IN_POST_VARIANTS_BY_CANON_KEY: dict[str, tuple[str, ...]] = {
+    "стройка": (
+        "строительство",
+        "строительные",
+        "на стройке",
+        "строительный объект",
+    ),
+    "штукатурка": ("штукатур", "штукатуры", "штукатурные", "штукатурка"),
+    "гипсакартон": ("гипсокартон", "гипсокартонщик", "гкл", "гипсокартонные"),
+    "плитка": ("плиточник", "плиточные", "кафель", "укладка плитки", "кафельщик"),
+    "электрик": ("электрика", "электромонтаж", "электромонтажник", "электрики"),
+    "каменщик": ("каменщика", "каменщики", "кладка", "каменная кладка"),
+    "бетонщик": ("бетон", "бетонные", "бетонные работы", "армирование"),
+    "арматурщик": ("арматура", "арматурные", "арматурные работы"),
+    "монтажник металлоконструкций": (
+        "металлоконструкции",
+        "металлоконструкций",
+        "монтаж металлоконструкций",
+        "монтажник",
+        "сварка металлоконструкций",
+    ),
+    "кровельщик": ("кровля", "кровельные", "кровельные работы"),
+    "плотник": ("плотницкие", "плотницких", "деревянные конструкции"),
+    "столяр": ("столярные", "столярка", "столярные работы"),
+    "штукатур": ("штукатурка", "штукатуры", "штукатурные", "штукатурные работы"),
+    "маляр": ("малярные", "малярные работы", "покраска", "покрасочные"),
+    "плиточник облицовщик": (
+        "плиточник",
+        "облицовщик",
+        "плитка",
+        "плиточные",
+        "облицовка",
+        "кафельщик",
+        "укладка",
+    ),
+    "гипсокартонщик": (
+        "гипсокартон",
+        "гкл",
+        "гипсокартонные",
+        "гипсокартонные работы",
+    ),
+    "фасадчик": ("фасад", "фасадные", "фасадные работы"),
+    "изолировщик": ("изоляция", "утеплитель", "изоляционные", "утепление"),
+}
+
+
+def _in_post_search_variants_for_needle(canon: str) -> list[str]:
+    """Return unique variant strings to substring-match (canonical + synonyms)."""
+    c = (canon or "").strip()
+    if not c:
+        return []
+    key = normalize_for_in_post_match(c)
+    extras = _IN_POST_VARIANTS_BY_CANON_KEY.get(key, ())
+    out: list[str] = []
+    seen: set[str] = set()
+    for piece in (c, *extras):
+        p = (piece or "").strip()
+        if not p:
+            continue
+        nk = normalize_for_in_post_match(p)
+        if nk and nk not in seen:
+            seen.add(nk)
+            out.append(p)
+    return out
+
+
+def match_in_post_keyword_canonical(
+    message: str | None, needles: Sequence[str]
+) -> tuple[str | None, str | None]:
+    """Match body against canonical needles and Russian trade synonyms.
+
+    Returns ``(canonical_needle_from_list, matched_variant)`` where ``matched_variant`` is the
+    first variant substring that matched (for debugging). Case and Unicode form are ignored for
+    matching; returned canonical is the original CSV token that owns the match.
+    """
+    hay = normalize_for_in_post_match(message or "")
+    if not hay:
+        return None, None
+    for canon in needles:
+        c = (canon or "").strip()
+        if not c:
+            continue
+        for variant in _in_post_search_variants_for_needle(c):
+            vn = normalize_for_in_post_match(variant)
+            if vn and vn in hay:
+                return c, variant
+    return None, None
+
+
 def primary_browser_search_phrase(raw: str) -> str:
     """First comma/newline token of ``BROWSER_SEARCH_QUERY`` (or CLI ``query``).
 
@@ -774,6 +1147,7 @@ def run_browser_group_search(
     facebook_ui_year_filter: bool = False,
     expand_see_more_before_extract: bool = False,
     body_keyword_union: bool = False,
+    in_post_keywords: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     raw_search = (query or settings.browser_search_query or "job").strip() or "job"
     discovery_query = primary_browser_search_phrase(raw_search)
@@ -823,12 +1197,18 @@ def run_browser_group_search(
             year_f,
         )
     body_needles: list[str] = []
+    body_keyword_source: str = "none"
     if body_keyword_union:
-        body_needles = build_body_keyword_needles(discovery_query, phrases)
+        if in_post_keywords is not None:
+            body_needles = [k for k in (str(s).strip() for s in in_post_keywords) if k]
+        elif (settings.browser_in_group_search_in_post or "").strip():
+            body_needles = parse_in_post_keywords(settings.browser_in_group_search_in_post)
+        if body_needles:
+            body_keyword_source = "in_post_keywords"
     logger.info(
         "Starting browser search sync discover_query=%s (raw=%r) in_group_queries=%s group_limit=%s post_limit=%s "
         "global_message_contains=%s publication_year_filter=%s publication_from_date=%s facebook_ui_filters=%s "
-        "expand_see_more=%s body_keyword_union=%s body_keyword_needles=%s",
+        "expand_see_more=%s body_keyword_union=%s body_keyword_source=%s body_keyword_needles=%s",
         discovery_query,
         raw_search,
         phrases,
@@ -840,6 +1220,7 @@ def run_browser_group_search(
         bool(filters_token),
         expand_see_more_before_extract,
         body_keyword_union,
+        body_keyword_source,
         len(body_needles),
     )
     try:
@@ -895,11 +1276,18 @@ def run_browser_group_search(
                             continue
                         if not post_matches_global_message_filter(nd.get("message"), gmc):
                             continue
-                        if body_keyword_union and not post_matches_body_keyword_union(
-                            nd.get("message"), body_needles
-                        ):
-                            logger.debug("Skipping post %s: body_keyword_union mismatch", pid)
-                            continue
+                        if body_keyword_union and body_needles:
+                            matched, matched_variant = match_in_post_keyword_canonical(
+                                nd.get("message"), body_needles
+                            )
+                            if matched is None:
+                                logger.debug("Skipping post %s: in_post_keywords mismatch", pid)
+                                continue
+                            nd["matched_in_post_keyword"] = matched
+                            if matched_variant and normalize_for_in_post_match(matched_variant) != normalize_for_in_post_match(
+                                matched
+                            ):
+                                nd["matched_in_post_variant"] = matched_variant
                         if not post_publication_matches_settings_filter(nd, settings):
                             logger.debug(
                                 "Skipping post %s: publication date=%s year=%s cutoff=%s year_filter=%s",
@@ -965,6 +1353,9 @@ def run_browser_group_search(
         if body_keyword_union:
             out["body_keyword_union"] = True
             out["body_keyword_needles_count"] = len(body_needles)
+            out["body_keyword_source"] = body_keyword_source
+            if body_needles:
+                out["in_post_keywords"] = list(body_needles)
         return out
     finally:
         runner.close()
@@ -1026,7 +1417,19 @@ def ensure_logged_in(runner: PlaywrightCliRunner, *, settings: Settings) -> None
     from src.services.facebook_challenge_vision import maybe_resolve_meta_visual_challenge
 
     timeout_seconds = settings.browser_search_timeout_seconds
+    if not runner.headed:
+        logger.warning(
+            "BROWSER_HEADLESS is enabled: no visible browser window. "
+            "Set BROWSER_HEADLESS=false in .env for manual login and 2FA."
+        )
+    else:
+        logger.info(
+            "Facebook auth: headed browser expected — if no window appears, check Dock / Mission Control "
+            "or another desktop space."
+        )
+    logger.info("Facebook auth: navigating to facebook.com …")
     runner.open("https://www.facebook.com/")
+    logger.info("Facebook auth: capturing page snapshot for login detection …")
     runner.snapshot("facebook-home")
     if _is_logged_in(runner):
         return
@@ -1136,6 +1539,17 @@ def extract_group_job_posts(
     expand_see_more: bool = False,
 ) -> list[BrowserFoundPost]:
     runner.open(build_group_search_url(group.group_url, keyword, filters=filters))
+    probe_out = runner.run_code(_GROUP_SEARCH_PROBE_JS)
+    probe_payload = _parse_playwright_cli_run_code_json_payload(probe_out)
+    if probe_payload.get("inaccessible"):
+        raise BrowserAutomationError("group content is unavailable or requires membership")
+    if probe_payload.get("empty_search"):
+        logger.info(
+            "Browser search empty UI (early exit; skipped snapshot/expand/scroll): group=%s phrase=%r",
+            group.group_url,
+            keyword,
+        )
+        return []
     if expand_see_more:
         clicks = expand_facebook_group_search_see_more(runner)
         logger.info(
@@ -1145,37 +1559,9 @@ def extract_group_job_posts(
             clicks,
         )
     runner.snapshot(f"group-search-{_slugify(group.group_name)}")
-    payload = runner.run_json(
-        """
-const squeeze = value => (value || "").replace(/\\s+/g, " ").trim();
-const bodyText = squeeze(document.body?.innerText || "");
-if (/content isn't available|This content isn't available|join group to see/i.test(bodyText)) {
-  return { inaccessible: true, posts: [] };
-}
-const postAnchors = Array.from(document.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="], a[href*="multi_permalinks="]'));
-const seen = new Set();
-const posts = [];
-for (const anchor of postAnchors) {
-  const href = anchor.href || "";
-  if (!href || seen.has(href)) continue;
-  const article = anchor.closest('[role="article"]') || anchor.closest('div[data-pagelet]') || anchor.parentElement;
-  const text = squeeze(article?.innerText || anchor.textContent || "");
-  if (!text) continue;
-  const timeEl = article?.querySelector('a[aria-label] time, time');
-  const authorEl = article?.querySelector('h2 a, h3 a, strong a');
-  seen.add(href);
-  posts.push({
-    post_url: href,
-    message: text.slice(0, 4000),
-    author_name: squeeze(authorEl?.textContent || ""),
-    created_time: timeEl?.getAttribute('datetime') || "",
-  });
-}
-return { inaccessible: false, posts };
-""".strip(),
-        scroll_rounds=4,
-        scroll_pause_ms=900,
-    )
+    extract_code = _build_group_search_scroll_extract_run_code(scroll_rounds=4, scroll_pause_ms=900)
+    raw_out = runner.run_code(extract_code)
+    payload = _parse_playwright_cli_run_code_json_payload(raw_out)
     if payload.get("inaccessible"):
         raise BrowserAutomationError("group content is unavailable or requires membership")
     posts: list[BrowserFoundPost] = []

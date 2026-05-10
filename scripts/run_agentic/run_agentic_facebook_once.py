@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
-"""Run agentic Facebook sync with expanded post bodies and stricter DB filters.
+"""Run one opt-in agentic Facebook sync using project `.env`.
 
-Same CLI as ``run_agentic_facebook_once.py``, plus:
+Usage from repo root:
 
-- **Ещё / See more:** After each in-group search navigation, scrolls and clicks truncated-post
-  controls before scraping so ``message`` includes fuller text when Meta hides it behind “Ещё”.
-- **Body keyword union:** Keeps a post only if its body contains at least one of: each
-  comma-separated ``--in-group-query`` phrase (after normal parsing), **or** the discovery
-  ``--query`` phrase (same as group discovery). Reduces unrelated hits in the database.
+    .venv/bin/python scripts/run_agentic/run_agentic_facebook_once.py
 
-Usage::
+Set `ENABLE_AGENTIC_FACEBOOK_SYNC=true` to execute. This script uses the separate
+agentic flow and does not call `run_browser_search_once.py`.
 
-    .venv/bin/python scripts/run_agentic_facebook_exact_posts.py
-
-Requires ``ENABLE_AGENTIC_FACEBOOK_SYNC=true``. Anthropic env vars are stripped like
-``run_agentic_facebook_once.py``.
+Anthropic (``ANTHROPIC_API_KEY`` / ``CLAUDE_MODEL``) is removed from the environment
+before loading settings so this run does not use Claude analysis or Meta challenge vision.
+Use ``scripts/run_agentic/run_agentic_facebook_once_anthropic.py`` when you need those keys (same sync).
 """
 
 from __future__ import annotations
@@ -26,11 +22,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parent
-_REPO = _SCRIPTS.parent
+_RUN_AGENTIC_DIR = Path(__file__).resolve().parent
+_SCRIPTS_ROOT = _RUN_AGENTIC_DIR.parent
+_REPO = _SCRIPTS_ROOT.parent
 os.environ.setdefault("FC_SEARCHER_REPO_ROOT", str(_REPO))
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+if str(_SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_ROOT))
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
@@ -87,7 +84,7 @@ def _die_py310_hint() -> None:
         "  Fix:\n"
         "    brew install python@3.12\n"
         "    ./scripts/recreate_venv_for_mcp.sh\n"
-        "    .venv/bin/python scripts/run_agentic_facebook_exact_posts.py\n",
+        "    .venv/bin/python scripts/run_agentic/run_agentic_facebook_once.py\n",
         file=sys.stderr,
     )
 
@@ -97,9 +94,15 @@ def main() -> int:
         _die_py310_hint()
         return 2
 
-    parser = argparse.ArgumentParser(
-        description="Agentic Facebook sync with see-more expansion and body keyword union filter."
-    )
+    # When stdout is piped (e.g. `tee`), use line buffering so progress logs appear immediately.
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(line_buffering=True)
+            sys.stderr.reconfigure(line_buffering=True)
+        except OSError:
+            pass
+
+    parser = argparse.ArgumentParser(description="Run agentic Facebook sync once (reads .env).")
     parser.add_argument("--query", default=None, help="Override BROWSER_SEARCH_QUERY")
     parser.add_argument("--in-group-query", default=None, dest="in_group_query")
     parser.add_argument("--group-limit", type=int, default=None, metavar="N")
@@ -115,11 +118,13 @@ def main() -> int:
     args = parser.parse_args()
 
     load_dotenv_file()
+    # Isolate from Anthropic credentials (see src.config_anthropic).
     os.environ.pop("ANTHROPIC_API_KEY", None)
     os.environ.pop("CLAUDE_MODEL", None)
     try:
         from src.config import clear_settings_caches, get_settings  # noqa: E402
         from src.db.session import init_db, init_engine  # noqa: E402
+        from src.logging_config import configure_logging  # noqa: E402
         from src.services.agentic_facebook import run_agentic_facebook_sync  # noqa: E402
     except ModuleNotFoundError as exc:
         name = getattr(exc, "name", "") or ""
@@ -134,6 +139,7 @@ def main() -> int:
 
     clear_settings_caches()
     settings = get_settings()
+    configure_logging(level=settings.log_level)
     init_engine(settings.database_url)
     init_db()
     gmc = args.global_message_contains
@@ -148,8 +154,6 @@ def main() -> int:
         seed_group_urls=args.seed_group_urls,
         global_message_contains=gmc,
         in_group_exact_keywords=bool(args.in_group_exact_keywords),
-        expand_see_more_before_extract=True,
-        body_keyword_union=True,
     )
     print(json.dumps(out, indent=2, default=str))
     return 0 if out.get("ok") else 1

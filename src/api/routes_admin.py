@@ -82,9 +82,16 @@ def admin_report_browser_html() -> tuple[Any, int]:
 def admin_report_browser_html_last() -> tuple[Any, int]:
     """Daily DB report (same JSON as ``POST /admin/report``) plus email latest ``report/search_*`` HTML."""
     _require_admin()
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get("html_report_dir") or payload.get("browser_html_report_dir")
+    opt: str | None = str(raw).strip() if raw is not None and str(raw).strip() else None
+
     return _safe_run(
         "report-browser-html-last",
-        lambda: run_daily_report_with_latest_browser_html_email(_settings()),
+        lambda: run_daily_report_with_latest_browser_html_email(
+            _settings(),
+            browser_html_report_dir=opt,
+        ),
     )
 
 

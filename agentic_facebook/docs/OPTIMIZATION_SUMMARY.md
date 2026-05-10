@@ -30,6 +30,7 @@
 ✓ **Expected output schema** (know what success looks like)  
 ✓ **Three separate documents** (navigate by role/phase)  
 ✓ **Print-friendly quick reference cards**  
+✓ **Root `.env.example`** — variable names grouped like production `.env` (docs cross-link here)
 
 ---
 

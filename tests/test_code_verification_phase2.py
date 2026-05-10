@@ -11,16 +11,26 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_EXACT_POSTS_SCRIPT = _REPO_ROOT / "scripts" / "run_agentic_facebook_exact_posts.py"
+_EXACT_POSTS_SCRIPT = _REPO_ROOT / "scripts" / "run_agentic" / "run_agentic_facebook_exact_posts.py"
 
 
 def test_phase2_exact_posts_script_cli_has_in_group_exact_keywords() -> None:
     src = _EXACT_POSTS_SCRIPT.read_text(encoding="utf-8")
     assert "--in-group-exact-keywords" in src
     assert 'dest="in_group_query"' in src or "dest='in_group_query'" in src
-    assert "in_group_exact_keywords=bool(args.in_group_exact_keywords)" in src
+    assert "in_group_exact_keywords=args.in_group_exact_keywords" in src
+    assert "BooleanOptionalAction" in src
+    assert 'dest="in_group_exact_keywords"' in src or "dest='in_group_exact_keywords'" in src
     assert "expand_see_more_before_extract=True" in src
     assert "body_keyword_union=True" in src
+
+
+def test_phase2_exact_posts_script_cli_has_in_post_keywords() -> None:
+    src = _EXACT_POSTS_SCRIPT.read_text(encoding="utf-8")
+    assert "--in-post-keywords" in src
+    assert 'dest="in_post_keywords"' in src or "dest='in_post_keywords'" in src
+    assert "parse_in_post_keywords" in src
+    assert "in_post_keywords=in_post_keywords" in src
 
 
 def test_phase2_split_in_group_query_tokens_commas() -> None:
@@ -86,7 +96,9 @@ def test_phase2_agentic_sync_surfaces_verification_metadata(monkeypatch, tmp_pat
             "in_group_exact_keywords": True,
             "expand_see_more": True,
             "body_keyword_union": True,
-            "body_keyword_needles_count": 3,
+            "body_keyword_needles_count": 2,
+            "body_keyword_source": "in_post_keywords",
+            "in_post_keywords": ["Плотник", "Столяр"],
         }
 
     monkeypatch.setattr(af, "run_browser_group_search", _fake_browser_search)
@@ -94,17 +106,20 @@ def test_phase2_agentic_sync_surfaces_verification_metadata(monkeypatch, tmp_pat
     out = af.run_agentic_facebook_sync(
         get_settings(),
         query="job",
-        in_group_query="Плотник,Столяр",
+        in_group_query="ищу работу",
         in_group_exact_keywords=True,
         expand_see_more_before_extract=True,
         body_keyword_union=True,
+        in_post_keywords=["Плотник", "Столяр"],
     )
 
     assert out["ok"] is True
     assert out.get("in_group_exact_keywords") is True
     assert out.get("expand_see_more") is True
     assert out.get("body_keyword_union") is True
-    assert out.get("body_keyword_needles_count") == 3
+    assert out.get("body_keyword_needles_count") == 2
+    assert out.get("body_keyword_source") == "in_post_keywords"
+    assert out.get("in_post_keywords") == ["Плотник", "Столяр"]
 
 
 @pytest.mark.parametrize(
@@ -116,5 +131,5 @@ def test_phase2_agentic_sync_surfaces_verification_metadata(monkeypatch, tmp_pat
     ],
 )
 def test_phase2_entry_scripts_exist(script_name: str) -> None:
-    p = _REPO_ROOT / "scripts" / script_name
+    p = _REPO_ROOT / "scripts" / "run_agentic" / script_name
     assert p.is_file(), f"missing {p}"

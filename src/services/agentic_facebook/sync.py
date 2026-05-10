@@ -84,6 +84,7 @@ def run_agentic_facebook_sync(
     facebook_ui_year_filter: bool = False,
     expand_see_more_before_extract: bool = False,
     body_keyword_union: bool = False,
+    in_post_keywords: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Run the isolated agentic Facebook flow and upsert posts with a distinct source."""
     settings = settings or get_settings()
@@ -134,6 +135,7 @@ def run_agentic_facebook_sync(
             facebook_ui_year_filter=facebook_ui_year_filter,
             expand_see_more_before_extract=expand_see_more_before_extract,
             body_keyword_union=body_keyword_union,
+            in_post_keywords=in_post_keywords,
         )
     except (ManualLoginRequiredError, BrowserAutomationError) as exc:
         return _with_agentic_report(
@@ -201,4 +203,8 @@ def run_agentic_facebook_sync(
         out["body_keyword_union"] = True
     if result.get("body_keyword_needles_count") is not None:
         out["body_keyword_needles_count"] = result["body_keyword_needles_count"]
+    if result.get("body_keyword_source"):
+        out["body_keyword_source"] = result["body_keyword_source"]
+    if result.get("in_post_keywords"):
+        out["in_post_keywords"] = list(result["in_post_keywords"])
     return _with_agentic_report(browse_result=result, summary=out)

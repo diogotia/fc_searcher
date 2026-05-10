@@ -22,6 +22,8 @@ DELIVERY_MANIFEST.md
   What shipped in this documentation bundle.
 
 Also in repo:
+  scripts/run_agentic/*.py      — agentic CLI entrypoints (once, exact_posts, exact_year, anthropic)
+  .env.example (repo root)    — grouped env vars; kept in sync with typical .env layout
   docs/FC_COMMAND.md           — CLI commands and flags
   agentic_facebook/README.md   — minimal enable + run (repo root relative)
   agentic_facebook/PIPELINES.md — flow references

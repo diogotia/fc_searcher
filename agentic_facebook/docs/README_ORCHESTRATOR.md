@@ -2,6 +2,8 @@
 
 Use this folder when you need **which script**, **which env vars**, or **how to debug** — not when editing application code.
 
+**Cursor:** long-form orchestrator instructions for `/fc.search_once` commands live in the repo **`skills/`** directory ([`skills/README.md`](../../skills/README.md)); `.cursor/commands/*.md` only points the agent at those `SKILL.md` files.
+
 ## Read order by role
 
 | Role | Start here | Then |
@@ -19,10 +21,10 @@ Use this folder when you need **which script**, **which env vars**, or **how to 
 
 | Script | Use when |
 |--------|----------|
-| `scripts/run_agentic_facebook_exact_posts.py` | Ещё expansion + body keyword **OR** filter |
-| `scripts/run_agentic_facebook_once.py` | Default agentic run (fastest) |
-| `scripts/run_agentic_facebook_once_exact_year.py` | **`BROWSER_POST_PUBLICATION_YEAR`** → `filters=` on URLs |
-| `scripts/run_agentic_facebook_once_anthropic.py` | Same as `once` but Anthropic env allowed |
+| `scripts/run_agentic/run_agentic_facebook_exact_posts.py` | Ещё expansion + body keyword **OR** filter |
+| `scripts/run_agentic/run_agentic_facebook_once.py` | Default agentic run (fastest) |
+| `scripts/run_agentic/run_agentic_facebook_once_exact_year.py` | **`BROWSER_POST_PUBLICATION_YEAR`** → `filters=` on URLs |
+| `scripts/run_agentic/run_agentic_facebook_once_anthropic.py` | Same as `once` but Anthropic env allowed |
 
 Optional: `./scripts/agentic_preflight.sh` from repo root.
 
